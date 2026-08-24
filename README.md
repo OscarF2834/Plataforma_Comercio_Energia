@@ -32,11 +32,14 @@ Este sistema básicamente trata de realizar el intercambio de energía entre los
 ●	la compra de un excedente
 ●	Registrar esa transacción realizada
 ●	y consultar el historial de compras y de las ventas.
+
  Un ejemplo de cómo funciona el sistema, sería de la siguiente manera:
 Un usuario posee paneles solares y durante determinado período produce 15 kWh, pero solamente consume 10 kWh.
 Por lo tanto, dispone de:
+
 15 kWh - 10 kWh = 5 kWh de excedente.  “CLAVE DEL SISTEMA”.
 El usuario puede publicar esos 5 kWh en la plataforma indicando un precio determinado.Otro usuario que necesita energía puede consultar la oferta y realizar la compra. La plataforma registra la operación y actualiza la cantidad de energía disponible. Ahora, el alcance principal de este sistema, sería la forma en cómo sería el sistema sin llegar a sobrepasar las funcionalidades.
+
 Para evitar que el proyecto sea demasiado grande, inicialmente no sería necesario realizar:
 ●	Pagos bancarios reales.
 ●	Conexión con empresas de energía.
@@ -53,10 +56,12 @@ Un productor dispone de:
 10 kWh
 y establece una subasta con un precio inicial de:
 $500 por kWh.
+
 Los consumidores pueden realizar ofertas:
 ●	Usuario A: $500/kWh
 ●	Usuario B: $550/kWh
 ●	Usuario C: $600/kWh
+
 Cuando finaliza el tiempo establecido para la subasta, el sistema determina la oferta ganadora y registra la transacción. La principales funcionalidades que tendría serian las siguientes
 ●	Crear una subasta.
 ●	Definir la cantidad de energía disponible.
@@ -68,6 +73,7 @@ Cuando finaliza el tiempo establecido para la subasta, el sistema determina la o
 ●	Consultar la oferta más alta.
 ●	Finalizar automáticamente la subasta.
 ●	Registrar al ganador.
+
 Alcance
 Para mantener el proyecto realizable, el concepto de "tiempo real" puede implementarse únicamente dentro de la plataforma.
 Por ejemplo, mediante una actualización periódica de las ofertas o mediante tecnologías como WebSocket si el equipo tiene tiempo suficiente. No es necesario construir un sistema de subastas comparable con plataformas comerciales de gran escala.
@@ -76,25 +82,32 @@ Por ejemplo, mediante una actualización periódica de las ofertas o mediante te
 Este subsistema permite conectar virtualmente los dispositivos domésticos (como   medidores inteligentes o inversores) para automatizar la lectura de generación y del consumo de la energía de la plataforma
 Funcionamiento básico
 por ejemplo: 
+
 Un medidor inteligente mostró que un panel solar produjo 8 kWh a las 2:00 PM  y que la casa consumió 5 kWh. El dispositivo envía estos datos al sistema y actualiza en tiempo real el saldo de excedente a 3 kWh sin necesidad de que el usuario lo ingrese de manera manual.
+
 Funciones principales
 ●	Registrar y vincular un dispositivo IoT. 
 ●	Simular la recepción de lecturas periódicas de generación y consumo.
 ●	registrar el historial de lecturas por fecha y hora.
 ●	calcular automáticamente el excedente diario/horario a partir de los datos que se reciben en el sistema.
 ●	Consultar el estado de la conexión.
+
  Alcance
 Para mantener el prototipo manejable, no se requiere un hardware físico ni protocolos complejos de telecomunicaciones. Las lecturas IoT pueden ser simuladas mediante un script, Una API (JSON) o un formulario de pruebas que envíe datos periódicamente al sistema.
 
 # 4.	Subsistema de predicción de producción y consumo 
 Este subsistema ofrece estimaciones a los usuarios sobre cuánta energía producirán o consumen en periodos futuros, ayudándoles a planificar la compra y venta anticipada de excedentes.
 Funcionamiento básico
+
 Por ejemplo:
+
 El sistema analiza el promedio histórico de los usuarios los fines de semana y el pronóstico de radiación solar (esta puede ser generada por un script). Le muestre una estimación: “Mañana se espera producir 18 kWh y consumir 10 kWh, tendrás 8 kWh disponibles para ofertar”.
 Funcionalidades principales 
+
 ●	Consultar gráficos o indicadores de predicción diaria/semanal.
 ●	Generar estimaciones simples de producción.
 ●	Generar estimaciones simples de consumo de hogar.
 ●	Mostrar recomendaciones al usuario sobre el mejor momento para vender o comprar energía.
+
  Alcance
 No es necesario implementar modelos complejos de IA o Machine Learning avanzado. La predicción se puede desarrollar utilizando promedios ponderados, regresiones lineales simples o datos de prueba precalculados almacenados en la base de datos.
