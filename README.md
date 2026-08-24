@@ -45,7 +45,7 @@ Para evitar que el proyecto sea demasiado grande, inicialmente no sería necesar
 ●	Medición oficial de energía.
 Las compras pueden manejarse mediante un saldo o sistema de transacciones virtuales.
 
-#2.	Subsistema de subastas en tiempo real. 
+# 2.	Subsistema de subastas en tiempo real. 
 Este subsistema permite realizar subastas sobre determinados excedentes energéticos, En lugar de que el productor establezca directamente un comprador, pública una cantidad de energía y establece las condiciones de la subasta.Los consumidores interesados pueden realizar ofertas durante un período determinado.
 Funcionamiento básico
 Por ejemplo:
@@ -72,7 +72,7 @@ Alcance
 Para mantener el proyecto realizable, el concepto de "tiempo real" puede implementarse únicamente dentro de la plataforma.
 Por ejemplo, mediante una actualización periódica de las ofertas o mediante tecnologías como WebSocket si el equipo tiene tiempo suficiente. No es necesario construir un sistema de subastas comparable con plataformas comerciales de gran escala.
 
-#3.	Subsistema de Integración con dispositivos IoT domésticos
+# 3.	Subsistema de Integración con dispositivos IoT domésticos
 Este subsistema permite conectar virtualmente los dispositivos domésticos (como   medidores inteligentes o inversores) para automatizar la lectura de generación y del consumo de la energía de la plataforma
 Funcionamiento básico
 por ejemplo: 
@@ -86,7 +86,7 @@ Funciones principales
  Alcance
 Para mantener el prototipo manejable, no se requiere un hardware físico ni protocolos complejos de telecomunicaciones. Las lecturas IoT pueden ser simuladas mediante un script, Una API (JSON) o un formulario de pruebas que envíe datos periódicamente al sistema.
 
-#4.	Subsistema de predicción de producción y consumo 
+# 4.	Subsistema de predicción de producción y consumo 
 Este subsistema ofrece estimaciones a los usuarios sobre cuánta energía producirán o consumen en periodos futuros, ayudándoles a planificar la compra y venta anticipada de excedentes.
 Funcionamiento básico
 Por ejemplo:
