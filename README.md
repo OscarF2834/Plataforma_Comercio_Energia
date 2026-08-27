@@ -285,3 +285,274 @@ El sistema estará organizado en cuatro subsistemas principales:
 4. **Predicción de producción y consumo.**
 
 De esta manera, el proyecto permitirá demostrar el funcionamiento de un mercado energético digital mediante un prototipo controlado, sin depender de infraestructura eléctrica real.
+
+# Plataforma de Comercio de Energia
+
+Plataforma que permite gestionar el intercambio de excedentes energeticos entre los mismos usuarios, apoyandose en informacion como predicciones basicas de consumo y produccion.
+
+## Descripcion General
+
+Los usuarios principales del sistema son:
+
+- **Productor**: Genera energia mediante paneles solares y puede tener excedentes disponibles para vender.
+- **Consumidor**: Necesita adquirir energia de otros usuarios cuando su produccion no es suficiente.
+
+Un usuario puede desempenar ambos roles simultaneamente.
+
+## Stack Tecnologico
+
+| Capa | Tecnologia |
+|------|-----------|
+| Frontend | React + TypeScript + Vite |
+| Backend | Laravel + PHP |
+| Base de datos | Memoria (in-memory) |
+| Patron de diseno | Singleton |
+
+---
+
+## Patron Singleton - Explicacion y Implementacion
+
+### Que es el Singleton?
+
+El Singleton es un patron de diseno que **garantiza que una clase tenga UNA sola instancia** en toda la aplicacion y proporciona un punto de acceso global a ella.
+
+**Analogia sencilla**: Imagina que tu escuela tiene una sola sala de profesores. No importa cuantos profesores haya, todos comparten el **mismo espacio**. Si un profesor deja un papel en el escritorio, otro profesor lo puede encontrar ahi. No existen "dos salas de profesores", solo una.
+
+### Para que sirve?
+
+- **Ahorrar memoria**: No crea objetos repetidos e innecesarios.
+- **Compartir datos**: Todos los componentes que usan el singleton trabajan con la **misma informacion**.
+- **Control centralizado**: Un solo punto de gestion para un recurso comun.
+
+### Como funciona? (Los 3 pasos clave)
+
+```
+1. Constructor PRIVADO    --> Nadie puede hacer "new MiClase()"
+2. Atributo ESTATICO     --> Guarda la unica instancia
+3. Metodo getInstance()  --> Devuelve siempre la misma instancia
+```
+
+```
+  Primera llamada                    Segunda llamada
+  ──────────────                     ──────────────
+
+  MarketService::getInstance()       MarketService::getInstance()
+          │                                   │
+          ▼                                   ▼
+  ┌─────────────────┐               ┌─────────────────┐
+  │ instance == null?│               │ instance != null│
+  │    SI (es null)  │               │  (ya existe)    │
+  └────────┬────────┘               └────────┬────────┘
+           ▼                                 ▼
+  ┌─────────────────┐               ┌─────────────────┐
+  │ Crea la instancia│              │ Retorna la misma│
+  │ y la guarda      │              │ instancia        │
+  └────────┬────────┘               └────────┬────────┘
+           ▼                                 ▼
+      ┌─────────┐                     ┌─────────┐
+      │ id: 1   │                     │ id: 1   │
+      │ name: X │                     │ name: X │
+      └─────────┘                     └─────────┘
+         MISMA instancia en ambos casos
+```
+
+### Donde se aplica en el proyecto
+
+#### Backend (Laravel) - 3 Servicios
+
+Los servicios singleton estan en `backend-laravel/app/Patterns/`:
+
+| Servicio | Archivo | Responsabilidad |
+|----------|---------|-----------------|
+| `MarketService` | `app/Patterns/MarketService.php` | Gestion de ofertas y transacciones |
+| `LoggerService` | `app/Patterns/LoggerService.php` | Registro de eventos y metricas |
+| `ConfigService` | `app/Patterns/ConfigService.php` | Configuracion centralizada |
+
+**MarketService** (`backend-laravel/app/Patterns/MarketService.php`):
+```php
+class MarketService
+{
+    // 2. Atributo estatico que guarda la unica instancia
+    private static ?MarketService $instance = null;
+
+    // Datos compartidos por toda la aplicacion
+    private array $offers = [];
+    private int $transactionCount = 0;
+
+    // 1. Constructor privado - nadie puede hacer "new MarketService()"
+    private function __construct() {}
+
+    // 3. Metodo que devuelve SIEMPRE la misma instancia
+    public static function getInstance(): self
+    {
+        if (self::$instance === null) {
+            self::$instance = new self();
+        }
+        return self::$instance;
+    }
+
+    public function registerOffer(array $data): EnergyOffer { ... }
+    public function getAvailableOffers(): array { ... }
+}
+```
+
+**LoggerService** (`backend-laravel/app/Patterns/LoggerService.php`):
+```php
+class LoggerService
+{
+    private static ?LoggerService $instance = null;
+    private array $logs = [];
+
+    private function __construct() {}
+
+    public static function getInstance(): self
+    {
+        if (self::$instance === null) {
+            self::$instance = new self();
+        }
+        return self::$instance;
+    }
+
+    public function log(string $message): void { ... }
+}
+```
+
+**ConfigService** (`backend-laravel/app/Patterns/ConfigService.php`):
+```php
+class ConfigService
+{
+    private static ?ConfigService $instance = null;
+
+    private function __construct() {}
+
+    public static function getInstance(): self
+    {
+        if (self::$instance === null) {
+            self::$instance = new self();
+        }
+        return self::$instance;
+    }
+
+    public function get(string $key): mixed { ... }
+}
+```
+
+**Uso en el controlador** (`backend-laravel/app/Http/Controllers/EnergyController.php`):
+```php
+// Todas las llamadas apuntan a la MISMA instancia
+$this->market = MarketService::getInstance();
+$this->logger = LoggerService::getInstance();
+$this->config = ConfigService::getInstance();
+```
+
+#### Frontend (React) - 1 Servicio
+
+| Servicio | Archivo | Responsabilidad |
+|----------|---------|-----------------|
+| `EnergyApiService` | `frontend/src/patterns/singleton/energy-api.service.ts` | Cliente HTTP centralizado |
+
+**EnergyApiService** (`frontend/src/patterns/singleton/energy-api.service.ts`):
+```typescript
+class EnergyApiService {
+  private static instance: EnergyApiService;
+  private baseUrl: string;
+
+  // Constructor privado
+  private constructor() {
+    this.baseUrl = 'http://localhost:8000/api';
+  }
+
+  // getInstance() en TypeScript
+  static getInstance(): EnergyApiService {
+    if (!EnergyApiService.instance) {
+      EnergyApiService.instance = new EnergyApiService();
+    }
+    return EnergyApiService.instance;
+  }
+
+  async getAvailableOffers(): Promise<EnergyOffer[]> { ... }
+  async createOffer(offer: EnergyOffer): Promise<EnergyOffer> { ... }
+}
+```
+
+### Flujo completo en la aplicacion
+
+```
+    Frontend (React)                         Backend (Laravel)
+    ────────────────                         ─────────────────
+
+    EnergyApiService                         MarketService
+    ::getInstance()                          ::getInstance()
+           │                                        │
+           ▼                                        ▼
+    ┌──────────────┐    POST /api/energy/offers  ┌──────────────┐
+    │  Un solo     │ ──────────────────────────► │  Un solo     │
+    │  objeto      │                             │  objeto      │
+    │  HTTP client │ ◄────────────────────────── │  offers[]    │
+    └──────────────┘    { ofertas en JSON }      └──────────────┘
+
+    Todos los componentes              Todos los controllers
+    usan el MISMO cliente              usan el MISMO servicio
+```
+
+---
+
+## Guia de Ejecucion
+
+### Backend (Laravel)
+
+```bash
+cd backend-laravel
+composer install
+php artisan key:generate
+php artisan serve --port=8000
+```
+
+El backend corre en `http://localhost:8000`.
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+El frontend corre en `http://localhost:5173`.
+
+### Endpoints API
+
+| Metodo | Ruta | Descripcion |
+|--------|------|-------------|
+| POST | `/api/energy/offers` | Crear una oferta de excedente |
+| GET | `/api/energy/offers` | Consultar ofertas disponibles |
+| POST | `/api/energy/offers/{id}/purchase` | Comprar energia de una oferta |
+| GET | `/api/energy/metrics` | Ver metricas del mercado |
+
+### Ejemplo de Request
+
+```bash
+# Crear oferta
+curl -X POST http://localhost:8000/api/energy/offers \
+  -H "Content-Type: application/json" \
+  -d '{
+    "producerName": "Juan Perez",
+    "totalKwh": 15,
+    "pricePerKwh": 500,
+    "description": "Excedente de paneles solares"
+  }'
+
+# Consultar ofertas
+curl http://localhost:8000/api/energy/offers
+
+# Comprar energia
+curl -X POST http://localhost:8000/api/energy/offers/1/purchase \
+  -H "Content-Type: application/json" \
+  -d '{"kwh": 5}'
+```
+
+---
+
+## Proximo Patron (Semana 2)
+
+*Proximamente se implementara el siguiente patron de diseno...*
