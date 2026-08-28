@@ -550,7 +550,15 @@ curl -X POST http://localhost:8000/api/energy/offers/1/purchase \
   -H "Content-Type: application/json" \
   -d '{"kwh": 5}'
 ```
+##  Video explicativo
 
+> **Demostración del proyecto**
+>
+> En el siguiente video podrás conocer el funcionamiento del proyecto, observar sus principales características y ver una demostración de su implementación.
+
+**[Ver video completo en YouTube](https://youtu.be/mqDKzU9JejY)**
+
+[![Ver video explicativo](https://img.youtube.com/vi/mqDKzU9JejY/maxresdefault.jpg)](https://youtu.be/mqDKzU9JejY)
 ---
 
 ## Proximo Patron (Semana 2)
