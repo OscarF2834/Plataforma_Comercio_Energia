@@ -43,6 +43,7 @@ class MarketService
                 $offer->availableKwh = $o['availableKwh'];
                 $offer->pricePerKwh = $o['pricePerKwh'];
                 $offer->description = $o['description'] ?? '';
+                $offer->type = $o['type'] ?? '';
                 $offer->createdAt = $o['createdAt'] ?? '';
                 $this->offers[] = $offer;
             }
@@ -68,6 +69,7 @@ class MarketService
         $offer->availableKwh = $data['totalKwh'];
         $offer->pricePerKwh = $data['pricePerKwh'];
         $offer->description = $data['description'] ?? '';
+        $offer->type = $data['type'];
         $offer->createdAt = now()->toIso8601String();
 
         $this->offers[] = $offer;

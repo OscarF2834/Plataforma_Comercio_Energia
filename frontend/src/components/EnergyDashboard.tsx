@@ -7,6 +7,7 @@ interface EnergyOffer {
   totalKwh: number;
   availableKwh: number;
   pricePerKwh: number;
+  type: 'solar' | 'wind';
   description?: string;
   createdAt?: string;
 }
@@ -20,7 +21,7 @@ export default function EnergyDashboard() {
   const fetchOffers = async () => {
     try {
       const data = await api.getAvailableOffers();
-      setOffers(data);
+      setOffers(data as EnergyOffer[]);
     } catch (error) {
       console.error('Error:', error);
     } finally {
@@ -35,6 +36,7 @@ export default function EnergyDashboard() {
   const handlePurchase = async (id: number) => {
     const kwh = prompt('Ingrese la cantidad de kWh a comprar:');
     if (!kwh) return;
+
     try {
       const result = await api.purchaseOffer(id, parseFloat(kwh));
       alert(result.message);
@@ -48,26 +50,45 @@ export default function EnergyDashboard() {
 
   return (
     <div style={styles.card}>
-      <h2 style={styles.title}>Ofertas Disponibles de Energia</h2>
+      <h2 style={styles.title}>Ofertas Disponibles de Energía</h2>
+
       {offers.length === 0 ? (
-        <p style={styles.empty}>No hay ofertas disponibles. Publica la primera.</p>
+        <p style={styles.empty}>
+          No hay ofertas disponibles. Publica la primera.
+        </p>
       ) : (
         <div style={styles.grid}>
           {offers.map((offer) => (
             <div key={offer.id} style={styles.offerCard}>
-              <h3 style={styles.offerTitle}>{offer.producerName}</h3>
+              <h3 style={styles.offerTitle}>
+                {offer.producerName}
+              </h3>
+
+              <p style={styles.offerType}>
+                {offer.type === 'solar'
+                  ? '☀️ Energía Solar'
+                  : '💨 Energía Eólica'}
+              </p>
+
               <p style={styles.offerDetail}>
                 <strong>{offer.availableKwh}</strong> kWh disponibles
               </p>
-              <p style={styles.offerPrice}>${offer.pricePerKwh} COP / kWh</p>
+
+              <p style={styles.offerPrice}>
+                ${offer.pricePerKwh} COP / kWh
+              </p>
+
               {offer.description && (
-                <p style={styles.offerDesc}>{offer.description}</p>
+                <p style={styles.offerDesc}>
+                  {offer.description}
+                </p>
               )}
+
               <button
                 onClick={() => handlePurchase(offer.id!)}
                 style={styles.buyButton}
               >
-                Comprar Energia
+                Comprar Energía
               </button>
             </div>
           ))}
@@ -108,6 +129,12 @@ const styles: Record<string, React.CSSProperties> = {
     margin: '0 0 8px 0',
     color: '#0f3460',
   },
+  offerType: {
+    fontSize: '0.9rem',
+    fontWeight: 'bold',
+    color: '#0f3460',
+    margin: '4px 0',
+  },
   offerDetail: {
     margin: '4px 0',
     fontSize: '1.1rem',
@@ -136,3 +163,4 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '1rem',
   },
 };
+``

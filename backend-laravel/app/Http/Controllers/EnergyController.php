@@ -5,6 +5,9 @@ namespace App\Http\Controllers;
 use App\Patterns\MarketService;
 use App\Patterns\LoggerService;
 use App\Patterns\ConfigService;
+use App\Patterns\Factory\EnergyOfferFactory;
+use App\Patterns\Factory\SolarOfferFactory;
+use App\Patterns\Factory\WindOfferFactory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -28,13 +31,42 @@ class EnergyController extends Controller
             'totalKwh' => 'required|numeric|min:1',
             'pricePerKwh' => 'required|numeric|min:0',
             'description' => 'nullable|string',
+            'type' => 'required|string|in:solar,wind',
         ]);
 
-        $offer = $this->market->registerOffer($data);
-        $this->logger->incrementOffers();
-        $this->logger->log("Oferta creada por {$data['producerName']}");
+        $factory = $this->getFactory($data['type']);
 
-        return response()->json($offer->toArray(), 201);
+        $offer = $factory->buildOffer($data);
+
+        $marketOffer = $this->market->registerOffer(
+            $offer->getData()
+        );
+
+        $this->logger->incrementOffers();
+
+        $this->logger->log(
+            "Oferta {$offer->getType()} creada por {$data['producerName']}"
+        );
+
+        return response()->json(
+            $marketOffer->toArray(),
+            201
+        );
+    }
+
+    /**
+     * Selecciona el Factory Concreteo.
+     */
+    private function getFactory(string $type): EnergyOfferFactory
+    {
+        return match ($type) {
+            'solar' => new SolarOfferFactory(),
+            'wind' => new WindOfferFactory(),
+
+            default => throw new \InvalidArgumentException(
+                "Tipo de energía no soportado: {$type}"
+            ),
+        };
     }
 
     public function getAvailableOffers(): JsonResponse
@@ -47,15 +79,25 @@ class EnergyController extends Controller
         return response()->json($offers);
     }
 
-    public function purchaseOffer(int $id, Request $request): JsonResponse
-    {
-        $data = $request->validate(['kwh' => 'required|numeric|min:1']);
+    public function purchaseOffer(
+        int $id,
+        Request $request
+    ): JsonResponse {
+        $data = $request->validate([
+            'kwh' => 'required|numeric|min:1'
+        ]);
 
-        $result = $this->market->purchaseOffer($id, $data['kwh']);
+        $result = $this->market->purchaseOffer(
+            $id,
+            $data['kwh']
+        );
 
         if ($result['success']) {
             $this->logger->incrementTransactions();
-            $this->logger->log("Compra de {$data['kwh']} KWh en oferta #{$id}");
+
+            $this->logger->log(
+                "Compra de {$data['kwh']} KWh en oferta #{$id}"
+            );
         }
 
         return response()->json($result);

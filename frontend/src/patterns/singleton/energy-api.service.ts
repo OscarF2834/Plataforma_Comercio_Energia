@@ -1,12 +1,14 @@
-interface EnergyOffer {
+export interface EnergyOffer {
   id?: number;
   producerName: string;
   totalKwh: number;
   availableKwh: number;
   pricePerKwh: number;
   description?: string;
+  type: 'solar' | 'wind';
   createdAt?: string;
 }
+
 
 class EnergyApiService {
   private static instance: EnergyApiService;
@@ -32,11 +34,23 @@ class EnergyApiService {
   async createOffer(offer: EnergyOffer): Promise<EnergyOffer> {
     const response = await fetch(`${this.baseUrl}/energy/offers`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
       body: JSON.stringify(offer),
     });
-    if (!response.ok) throw new Error('Error al crear oferta');
-    return response.json();
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error('Respuesta del servidor:', data);
+      throw new Error(
+        data.message || data.error || 'Error al crear oferta'
+      );
+    }
+
+    return data;
   }
 
   async purchaseOffer(id: number, kwh: number) {
