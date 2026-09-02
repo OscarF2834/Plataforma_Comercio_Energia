@@ -3,6 +3,7 @@
 namespace App\Patterns;
 
 use App\Models\EnergyOffer;
+use App\Patterns\Factories\EnergySourceFactory;
 
 class MarketService
 {
@@ -43,6 +44,7 @@ class MarketService
                 $offer->availableKwh = $o['availableKwh'];
                 $offer->pricePerKwh = $o['pricePerKwh'];
                 $offer->description = $o['description'] ?? '';
+                $offer->energyType = $o['energyType'] ?? '';
                 $offer->createdAt = $o['createdAt'] ?? '';
                 $this->offers[] = $offer;
             }
@@ -61,6 +63,10 @@ class MarketService
 
     public function registerOffer(array $data): EnergyOffer
     {
+        // Usa el Factory Method para validar y normalizar el tipo de energia.
+        // Si el tipo no es soportado, la fabrica lanza una excepcion.
+        $source = (new EnergySourceFactory())->create($data['energyType'] ?? '');
+
         $offer = new EnergyOffer();
         $offer->id = $this->nextId++;
         $offer->producerName = $data['producerName'];
@@ -68,6 +74,7 @@ class MarketService
         $offer->availableKwh = $data['totalKwh'];
         $offer->pricePerKwh = $data['pricePerKwh'];
         $offer->description = $data['description'] ?? '';
+        $offer->energyType = $source->getType();
         $offer->createdAt = now()->toIso8601String();
 
         $this->offers[] = $offer;

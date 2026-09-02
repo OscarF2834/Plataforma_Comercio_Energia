@@ -24,6 +24,17 @@ Desarrollar una plataforma que permita **gestionar el intercambio de excedentes 
 
 ---
 
+## Stack Tecnológico
+
+| Capa | Tecnología |
+|------|-----------|
+| Frontend | React + TypeScript + Vite |
+| Backend | Laravel + PHP |
+| Base de datos | Memoria (in-memory) persistida en JSON |
+| Patrones de diseño | Singleton, Factory Method |
+
+---
+
 ## Usuarios principales
 
 La plataforma contará principalmente con dos tipos de usuarios:
@@ -286,220 +297,422 @@ El sistema estará organizado en cuatro subsistemas principales:
 
 De esta manera, el proyecto permitirá demostrar el funcionamiento de un mercado energético digital mediante un prototipo controlado, sin depender de infraestructura eléctrica real.
 
-# Plataforma de Comercio de Energia
+---
 
-Plataforma que permite gestionar el intercambio de excedentes energeticos entre los mismos usuarios, apoyandose en informacion como predicciones basicas de consumo y produccion.
+# Patrones de Diseño Aplicados
 
-## Descripcion General
+> En esta sección se documentan los patrones de diseño implementados en el proyecto.
+> Cada patrón incluye un **en qué consiste dentro del proyecto** y su **diagrama UML individual**.
+> Los patrones se van añadiendo a medida que se implementan (búscalos directamente en el índice).
 
-Los usuarios principales del sistema son:
+## Índice de Patrones
 
-- **Productor**: Genera energia mediante paneles solares y puede tener excedentes disponibles para vender.
-- **Consumidor**: Necesita adquirir energia de otros usuarios cuando su produccion no es suficiente.
-
-Un usuario puede desempenar ambos roles simultaneamente.
-
-## Stack Tecnologico
-
-| Capa | Tecnologia |
-|------|-----------|
-| Frontend | React + TypeScript + Vite |
-| Backend | Laravel + PHP |
-| Base de datos | Memoria (in-memory) |
-| Patron de diseno | Singleton |
+| # | Patrón | Implementación | Capa | Sección |
+|---|--------|----------------|------|---------|
+| 1 | [Singleton](#1-marketservice--backend) · `MarketService` | Backend | [Ir](#1-marketservice--backend) |
+| 2 | [Singleton](#2-loggerservice--backend) · `LoggerService` | Backend | [Ir](#2-loggerservice--backend) |
+| 3 | [Singleton](#3-configservice--backend) · `ConfigService` | Backend | [Ir](#3-configservice--backend) |
+| 4 | [Singleton](#4-energyapiservice--frontend) · `EnergyApiService` | Frontend | [Ir](#4-energyapiservice--frontend) |
+| 5 | [Factory Method](#5-energysourcefactory--backend) · `EnergySourceFactory` | Backend | [Ir](#5-energysourcefactory--backend) |
+| 6 | [Factory Method](#6-energycardfactory--frontend) · `EnergyCardFactory` | Frontend | [Ir](#6-energycardfactory--frontend) |
 
 ---
 
-## Patron Singleton - Explicacion y Implementacion
+# Patrón Singleton
 
-### Que es el Singleton?
+## ¿Qué es dentro del proyecto?
 
-El Singleton es un patron de diseno que **garantiza que una clase tenga UNA sola instancia** en toda la aplicacion y proporciona un punto de acceso global a ella.
+El **Singleton** se usa en el proyecto para garantizar que ciertos servicios (configuración, logs y el mercado de energía) tengan **una única instancia compartida** en toda la aplicación. De esta forma, todos los controladores y componentes usan el **mismo estado y los mismos datos**, evitando duplicar memoria o perder información entre servicios.
 
-**Analogia sencilla**: Imagina que tu escuela tiene una sola sala de profesores. No importa cuantos profesores haya, todos comparten el **mismo espacio**. Si un profesor deja un papel en el escritorio, otro profesor lo puede encontrar ahi. No existen "dos salas de profesores", solo una.
+**Implementaciones actuales (4):**
 
-### Para que sirve?
+- `MarketService` — Backend (PHP)
+- `LoggerService` — Backend (PHP)
+- `ConfigService` — Backend (PHP)
+- `EnergyApiService` — Frontend (TypeScript)
 
-- **Ahorrar memoria**: No crea objetos repetidos e innecesarios.
-- **Compartir datos**: Todos los componentes que usan el singleton trabajan con la **misma informacion**.
-- **Control centralizado**: Un solo punto de gestion para un recurso comun.
+---
 
-### Como funciona? (Los 3 pasos clave)
+## 1. `MarketService` — Backend
+
+**Archivo:** `backend-laravel/app/Patterns/MarketService.php`
+
+**En qué consiste dentro del proyecto:** Gestión centralizada del mercado de energía. Almacena todas las ofertas de excedentes en una única instancia, las persiste en un archivo JSON y las mantiene compartidas entre todos los controladores. Además, al registrar una oferta delega en `EnergySourceFactory` la validación y normalización del tipo de energía (usa el patrón Factory Method internamente).
+
+**Diagrama UML:**
 
 ```
-1. Constructor PRIVADO    --> Nadie puede hacer "new MiClase()"
-2. Atributo ESTATICO     --> Guarda la unica instancia
-3. Metodo getInstance()  --> Devuelve siempre la misma instancia
+┌───────────────────────────────────────────────────────────────┐
+│                     «Singleton»                               │
+│                   MarketService                                │
+├───────────────────────────────────────────────────────────────┤
+│ - instance : MarketService        (única instancia)           │
+│ - offers : array                 (ofertas del mercado)        │
+│ - nextId : int                                                │
+│ - transactionCount : int                                       │
+│ - dataFile : string                                            │
+├───────────────────────────────────────────────────────────────┤
+│ - __construct()            (privado)                          │
+│ + getInstance() : MarketService      (devuelve la misma)       │
+│ + registerOffer(array) : EnergyOffer                           │
+│ + getAvailableOffers() : array                                 │
+│ + purchaseOffer(int, int) : array                              │
+│ + getMetrics() : array                                         │
+└───────────────────────────────────────────────────────────────┘
+        │                                     │
+        │ 1                                 1 │  usa
+        ▼                                     ▼
+┌───────────────┐                    ┌────────────────────────┐
+│ EnergyController │                 │ EnergySourceFactory     │
+│  (consume)       │                 │  (Factory Method)       │
+└───────────────┘                    └────────────────────────┘
 ```
 
-```
-  Primera llamada                    Segunda llamada
-  ──────────────                     ──────────────
+**Código clave:**
 
-  MarketService::getInstance()       MarketService::getInstance()
-          │                                   │
-          ▼                                   ▼
-  ┌─────────────────┐               ┌─────────────────┐
-  │ instance == null?│               │ instance != null│
-  │    SI (es null)  │               │  (ya existe)    │
-  └────────┬────────┘               └────────┬────────┘
-           ▼                                 ▼
-  ┌─────────────────┐               ┌─────────────────┐
-  │ Crea la instancia│              │ Retorna la misma│
-  │ y la guarda      │              │ instancia        │
-  └────────┬────────┘               └────────┬────────┘
-           ▼                                 ▼
-      ┌─────────┐                     ┌─────────┐
-      │ id: 1   │                     │ id: 1   │
-      │ name: X │                     │ name: X │
-      └─────────┘                     └─────────┘
-         MISMA instancia en ambos casos
-```
-
-### Donde se aplica en el proyecto
-
-#### Backend (Laravel) - 3 Servicios
-
-Los servicios singleton estan en `backend-laravel/app/Patterns/`:
-
-| Servicio | Archivo | Responsabilidad |
-|----------|---------|-----------------|
-| `MarketService` | `app/Patterns/MarketService.php` | Gestion de ofertas y transacciones |
-| `LoggerService` | `app/Patterns/LoggerService.php` | Registro de eventos y metricas |
-| `ConfigService` | `app/Patterns/ConfigService.php` | Configuracion centralizada |
-
-**MarketService** (`backend-laravel/app/Patterns/MarketService.php`):
 ```php
-class MarketService
+private static ?MarketService $instance = null;   // 1. atributo estático
+private function __construct() {}                  // 2. constructor privado
+
+public static function getInstance(): self          // 3. acceso global
 {
-    // 2. Atributo estatico que guarda la unica instancia
-    private static ?MarketService $instance = null;
-
-    // Datos compartidos por toda la aplicacion
-    private array $offers = [];
-    private int $transactionCount = 0;
-
-    // 1. Constructor privado - nadie puede hacer "new MarketService()"
-    private function __construct() {}
-
-    // 3. Metodo que devuelve SIEMPRE la misma instancia
-    public static function getInstance(): self
-    {
-        if (self::$instance === null) {
-            self::$instance = new self();
-        }
-        return self::$instance;
+    if (self::$instance === null) {
+        self::$instance = new self();
     }
+    return self::$instance;
+}
 
-    public function registerOffer(array $data): EnergyOffer { ... }
-    public function getAvailableOffers(): array { ... }
+public function registerOffer(array $data): EnergyOffer
+{
+    // Delega en la fábrica (Factory Method) para validar el tipo
+    $source = (new EnergySourceFactory())->create($data['energyType'] ?? '');
+    // ...crea y guarda la oferta en $this->offers
 }
 ```
 
-**LoggerService** (`backend-laravel/app/Patterns/LoggerService.php`):
+---
+
+## 2. `LoggerService` — Backend
+
+**Archivo:** `backend-laravel/app/Patterns/LoggerService.php`
+
+**En qué consiste dentro del proyecto:** Registro centralizado de eventos y métricas de la aplicación. Mantiene en una única instancia el historial de logs, el contador de transacciones y el contador de ofertas, persistiéndolos en un archivo JSON para que no se pierdan entre peticiones.
+
+**Diagrama UML:**
+
+```
+┌───────────────────────────────────────────────────────────────┐
+│                     «Singleton»                               │
+│                   LoggerService                               │
+├───────────────────────────────────────────────────────────────┤
+│ - instance : LoggerService        (única instancia)           │
+│ - logs : array                   (historial de eventos)       │
+│ - transactionCount : int                                       │
+│ - offerCount : int                                             │
+│ - dataFile : string                                            │
+├───────────────────────────────────────────────────────────────┤
+│ - __construct()            (privado)                          │
+│ + getInstance() : LoggerService      (devuelve la misma)       │
+│ + log(string) : void                                            │
+│ + incrementTransactions() : void                                │
+│ + incrementOffers() : void                                      │
+│ + getMetrics() : array                                          │
+└───────────────────────────────────────────────────────────────┘
+        │
+        │ 1
+        ▼
+┌───────────────┐
+│ EnergyController │
+│  (consume)       │
+└───────────────┘
+```
+
+**Código clave:**
+
 ```php
-class LoggerService
+private static ?LoggerService $instance = null;
+private function __construct() {}
+
+public static function getInstance(): self
 {
-    private static ?LoggerService $instance = null;
-    private array $logs = [];
-
-    private function __construct() {}
-
-    public static function getInstance(): self
-    {
-        if (self::$instance === null) {
-            self::$instance = new self();
-        }
-        return self::$instance;
+    if (self::$instance === null) {
+        self::$instance = new self();
     }
+    return self::$instance;
+}
 
-    public function log(string $message): void { ... }
+public function log(string $message): void
+{
+    $this->logs[] = '[' . date('Y-m-d H:i:s') . '] ' . $message;
+    $this->save();
 }
 ```
 
-**ConfigService** (`backend-laravel/app/Patterns/ConfigService.php`):
+---
+
+## 3. `ConfigService` — Backend
+
+**Archivo:** `backend-laravel/app/Patterns/ConfigService.php`
+
+**En qué consiste dentro del proyecto:** Configuración centralizada de la plataforma. Almacena en una única instancia las constantes globales (nombre del mercado, precio por defecto por kWh, moneda y máximo de oferta), de modo que todos los servicios lean los mismos valores sin recalcularlos.
+
+**Diagrama UML:**
+
+```
+┌───────────────────────────────────────────────────────────────┐
+│                     «Singleton»                               │
+│                   ConfigService                               │
+├───────────────────────────────────────────────────────────────┤
+│ - instance : ConfigService         (única instancia)          │
+│ - config : array                   (valores de configuración) │
+│      marketName, defaultPricePerKwh,                          │
+│      currency, maxOfferKwh                                    │
+├───────────────────────────────────────────────────────────────┤
+│ - __construct()            (privado)                          │
+│ + getInstance() : ConfigService       (devuelve la misma)      │
+│ + get(string) : mixed                                          │
+│ + getAll() : array                                             │
+└───────────────────────────────────────────────────────────────┘
+        │
+        │ 1
+        ▼
+┌───────────────┐
+│ EnergyController │
+│  (consume)       │
+└───────────────┘
+```
+
+**Código clave:**
+
 ```php
-class ConfigService
+private static ?ConfigService $instance = null;
+private function __construct() {}
+
+public static function getInstance(): self
 {
-    private static ?ConfigService $instance = null;
-
-    private function __construct() {}
-
-    public static function getInstance(): self
-    {
-        if (self::$instance === null) {
-            self::$instance = new self();
-        }
-        return self::$instance;
+    if (self::$instance === null) {
+        self::$instance = new self();
     }
+    return self::$instance;
+}
 
-    public function get(string $key): mixed { ... }
+public function get(string $key): mixed
+{
+    return $this->config[$key] ?? null;
 }
 ```
 
-**Uso en el controlador** (`backend-laravel/app/Http/Controllers/EnergyController.php`):
-```php
-// Todas las llamadas apuntan a la MISMA instancia
-$this->market = MarketService::getInstance();
-$this->logger = LoggerService::getInstance();
-$this->config = ConfigService::getInstance();
+---
+
+## 4. `EnergyApiService` — Frontend
+
+**Archivo:** `frontend/src/patterns/singleton/energy-api.service.ts`
+
+**En qué consiste dentro del proyecto:** Cliente HTTP centralizado del frontend. Expone una única instancia que encapsula todas las llamadas al backend (consultar ofertas, crear ofertas, comprar, métricas y catálogo de fuentes). Todos los componentes de React comparten así el mismo cliente y la misma URL base.
+
+**Diagrama UML:**
+
+```
+┌───────────────────────────────────────────────────────────────┐
+│                     «Singleton»                               │
+│                 EnergyApiService                              │
+├───────────────────────────────────────────────────────────────┤
+│ - instance : EnergyApiService       (única instancia)         │
+│ - baseUrl : string                  (http://localhost:8000/api)│
+├───────────────────────────────────────────────────────────────┤
+│ - constructor()               (privado)                       │
+│ + getInstance() : EnergyApiService  (devuelve la misma)       │
+│ + getAvailableOffers() : Promise<EnergyOffer[]>               │
+│ + createOffer(offer) : Promise<EnergyOffer>                   │
+│ + purchaseOffer(id, kwh) : Promise                             │
+│ + getMetrics() : Promise                                       │
+│ + getSourceCatalog() : Promise                                 │
+└───────────────────────────────────────────────────────────────┘
+        ▲          ▲          ▲
+        │          │          │ 1  (todos usan la misma instancia)
+┌───────────────┐ ┌────────────────┐ ┌────────────────┐
+│  EnergyCatalog │ │ EnergyDashboard │ │  CreateOffer    │
+│  (React)       │ │  (React)        │ │  (React)        │
+└───────────────┘ └────────────────┘ └────────────────┘
 ```
 
-#### Frontend (React) - 1 Servicio
+**Código clave:**
 
-| Servicio | Archivo | Responsabilidad |
-|----------|---------|-----------------|
-| `EnergyApiService` | `frontend/src/patterns/singleton/energy-api.service.ts` | Cliente HTTP centralizado |
-
-**EnergyApiService** (`frontend/src/patterns/singleton/energy-api.service.ts`):
 ```typescript
 class EnergyApiService {
   private static instance: EnergyApiService;
   private baseUrl: string;
 
-  // Constructor privado
-  private constructor() {
+  private constructor() {                       // constructor privado
     this.baseUrl = 'http://localhost:8000/api';
   }
 
-  // getInstance() en TypeScript
-  static getInstance(): EnergyApiService {
+  static getInstance(): EnergyApiService {       // acceso global
     if (!EnergyApiService.instance) {
       EnergyApiService.instance = new EnergyApiService();
     }
     return EnergyApiService.instance;
   }
-
-  async getAvailableOffers(): Promise<EnergyOffer[]> { ... }
-  async createOffer(offer: EnergyOffer): Promise<EnergyOffer> { ... }
 }
-```
-
-### Flujo completo en la aplicacion
-
-```
-    Frontend (React)                         Backend (Laravel)
-    ────────────────                         ─────────────────
-
-    EnergyApiService                         MarketService
-    ::getInstance()                          ::getInstance()
-           │                                        │
-           ▼                                        ▼
-    ┌──────────────┐    POST /api/energy/offers  ┌──────────────┐
-    │  Un solo     │ ──────────────────────────► │  Un solo     │
-    │  objeto      │                             │  objeto      │
-    │  HTTP client │ ◄────────────────────────── │  offers[]    │
-    └──────────────┘    { ofertas en JSON }      └──────────────┘
-
-    Todos los componentes              Todos los controllers
-    usan el MISMO cliente              usan el MISMO servicio
 ```
 
 ---
 
-## Guia de Ejecucion
+# Patrón Factory Method
 
-### Backend (Laravel)
+## ¿Qué es dentro del proyecto?
+
+El **Factory Method** se usa en el proyecto para **centralizar la creación de objetos** según un tipo. En lugar de que el código de negocio haga `new` directamente, una **fábrica** recibe un tipo (`"solar"`, `"wind"`, `"hydro"`) y devuelve la clase concreta correcta. De esta forma es fácil **extender el sistema**: basta con crear una nueva clase y registrarla en la fábrica.
+
+**Implementaciones actuales (2):**
+
+- `EnergySourceFactory` — Backend (PHP/`EnergySource`)
+- `EnergyCardFactory` — Frontend (TypeScript/React)
+
+---
+
+## 5. `EnergySourceFactory` — Backend
+
+**Archivo:** `backend-laravel/app/Patterns/Factories/EnergySourceFactory.php`
+
+**En qué consiste dentro del proyecto:** Fabrica las diferentes **fuentes de energía renovable** del catálogo. Según el tipo recibido crea una instancia concreta de `SolarEnergy`, `WindEnergy` o `HydroEnergy` (todas subclases de `EnergySource`). Si el tipo no existe, lanza una excepción (que el backend responde como `422`). Se usa tanto en el catálogo (`createAll`) como en la validación de tipo al crear una oferta (`MarketService`).
+
+**Diagrama UML:**
+
+```
+┌──────────────────────────────┐
+│      «Creator / Fábrica»     │
+│    EnergySourceFactory       │
+├──────────────────────────────┤
+│ + TYPES : array              │
+├──────────────────────────────┤
+│ + create(string) :           │
+│        EnergySource          │
+│ + createAll() : array        │
+└──────────────┬───────────────┘
+               │  crea
+               ▼
+┌──────────────────────────────────────────────────┐
+│           «Producto»                             │
+│    abstract class EnergySource                   │
+├──────────────────────────────────────────────────┤
+│ + getType() : string        (abstract)           │
+│ + getName() : string        (abstract)           │
+│ + getDescription() : string (abstract)           │
+│ + getEfficiency() : int     (abstract)           │
+│ + getColor() : string       (abstract)           │
+│ + toArray() : array                              │
+└──────────────────────────────────────────────────┘
+               ▲          ▲          ▲
+               │          │          │  extienden
+    ┌──────────────┐ ┌───────────┐ ┌───────────┐
+    │  SolarEnergy │ │ WindEnergy│ │HydroEnergy│
+    │  e=85 #f39c12│ │ e=70 #34..│ │ e=92 #2e..│
+    └──────────────┘ └───────────┘ └───────────┘
+```
+
+**Código clave:**
+
+```php
+class EnergySourceFactory
+{
+    public const TYPES = ['solar', 'wind', 'hydro'];
+
+    public function create(string $type): EnergySource
+    {
+        return match (strtolower($type)) {
+            'solar' => new SolarEnergy(),
+            'wind'  => new WindEnergy(),
+            'hydro' => new HydroEnergy(),
+            default => throw new \InvalidArgumentException("Tipo de energia no soportado: {$type}"),
+        };
+    }
+
+    public function createAll(): array
+    {
+        return array_map(fn(string $type) => $this->create($type), self::TYPES);
+    }
+}
+```
+
+**Uso en `EnergyController`:**
+
+```php
+// Endpoint GET /api/energy/source-catalog
+$sources = array_map(fn($source) => $source->toArray(), $this->sourceFactory->createAll());
+```
+
+---
+
+## 6. `EnergyCardFactory` — Frontend
+
+**Archivo:** `frontend/src/patterns/factory/EnergyCardFactory.tsx`
+
+**En qué consiste dentro del proyecto:** Fabrica el **componente de React correcto** según el tipo de energía. Recibe un tipo (`"solar"`, `"wind"`, `"hydro"`) y devuelve la tarjeta visual correspondiente (`SolarCard`, `WindCard` o `HydroCard`) para el catálogo de energía. Se exporta como una única instancia de fábrica compartida.
+
+**Diagrama UML:**
+
+```
+┌──────────────────────────────┐
+│      «Creator / Fábrica»     │
+│     EnergyCardFactory        │
+├──────────────────────────────┤
+│ + create(string) :           │
+│        CardComponent         │
+└──────────────┬───────────────┘
+               │  crea
+               ▼
+┌──────────────────────────────────────────────────┐
+│        «Producto / Interfaz»                    │
+│   interface EnergySource  (types.ts)             │
+├──────────────────────────────────────────────────┤
+│ + type : string                                  │
+│ + name : string                                  │
+│ + description : string                           │
+│ + efficiency : number                            │
+│ + color : string                                 │
+└──────────────────────────────────────────────────┘
+        ▲              ▲              ▲
+        │              │              │  componentes
+        │              │              │  (renderizan)
+    ┌──────────┐   ┌─────────┐    ┌─────────┐
+    │ SolarCard │   │WindCard │    │HydroCard│
+    │  ☀️ #f39c12│   │ 🌬️ #3498db│   │ 💧 #2ecc71│
+    └──────────┘   └─────────┘    └─────────┘
+```
+
+**Código clave:**
+
+```typescript
+class EnergyCardFactory {
+  create(type: string): CardComponent {
+    switch (type) {
+      case 'solar': return SolarCard;
+      case 'wind':  return WindCard;
+      case 'hydro': return HydroCard;
+      default:      throw new Error(`Tipo de energia no soportado: ${type}`);
+    }
+  }
+}
+
+// Se exporta una única instancia compartida
+const instance = new EnergyCardFactory();
+export default instance;
+```
+
+**Uso en `EnergyCatalog` (React):**
+
+```typescript
+// La fábrica elige el componente según el tipo
+const Card = energyCardFactory.create(source.type);
+return <Card key={source.type} source={source} onPublish={onPublish} />;
+```
+
+---
+
+# Guía de Ejecución
+
+## Backend (Laravel)
 
 ```bash
 cd backend-laravel
@@ -510,7 +723,7 @@ php artisan serve --port=8000
 
 El backend corre en `http://localhost:8000`.
 
-### Frontend
+## Frontend
 
 ```bash
 cd frontend
@@ -520,36 +733,42 @@ npm run dev
 
 El frontend corre en `http://localhost:5173`.
 
-### Endpoints API
+## Endpoints API
 
-| Metodo | Ruta | Descripcion |
+| Método | Ruta | Descripción |
 |--------|------|-------------|
 | POST | `/api/energy/offers` | Crear una oferta de excedente |
 | GET | `/api/energy/offers` | Consultar ofertas disponibles |
-| POST | `/api/energy/offers/{id}/purchase` | Comprar energia de una oferta |
-| GET | `/api/energy/metrics` | Ver metricas del mercado |
+| POST | `/api/energy/offers/{id}/purchase` | Comprar energía de una oferta |
+| GET | `/api/energy/metrics` | Ver métricas del mercado |
+| GET | `/api/energy/source-catalog` | Ver catálogo de fuentes de energía (Factory Method) |
 
-### Ejemplo de Request
+## Ejemplo de Request
 
 ```bash
-# Crear oferta
+# Crear oferta (energyType se valida con EnergySourceFactory)
 curl -X POST http://localhost:8000/api/energy/offers \
   -H "Content-Type: application/json" \
   -d '{
     "producerName": "Juan Perez",
     "totalKwh": 15,
     "pricePerKwh": 500,
+    "energyType": "solar",
     "description": "Excedente de paneles solares"
   }'
 
 # Consultar ofertas
 curl http://localhost:8000/api/energy/offers
 
-# Comprar energia
+# Comprar energía
 curl -X POST http://localhost:8000/api/energy/offers/1/purchase \
   -H "Content-Type: application/json" \
   -d '{"kwh": 5}'
+
+# Consultar catálogo de fuentes (Factory Method)
+curl http://localhost:8000/api/energy/source-catalog
 ```
+
 ##  Video explicativo
 
 > **Demostración del proyecto**
@@ -564,3 +783,4 @@ curl -X POST http://localhost:8000/api/energy/offers/1/purchase \
 ## Proximo Patron (Semana 2)
 
 *Proximamente se implementara el siguiente patron de diseno...*
+

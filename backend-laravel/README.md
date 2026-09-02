@@ -23,6 +23,7 @@ php artisan serve --port=8000
 | `GET` | `/api/energy/offers` | Listar ofertas disponibles |
 | `POST` | `/api/energy/offers/{id}/purchase` | Comprar energía |
 | `GET` | `/api/energy/metrics` | Métricas del mercado |
+| `GET` | `/api/energy/source-catalog` | Catálogo de fuentes de energía (Factory Method) |
 
 ## Estructura del Proyecto
 
@@ -34,7 +35,14 @@ backend-laravel/
 │   └── Patterns/
 │       ├── MarketService.php
 │       ├── LoggerService.php
-│       └── ConfigService.php
+│       ├── ConfigService.php
+│       ├── EnergySources/
+│       │   ├── EnergySource.php
+│       │   ├── SolarEnergy.php
+│       │   ├── WindEnergy.php
+│       │   └── HydroEnergy.php
+│       └── Factories/
+│           └── EnergySourceFactory.php
 ├── routes/api.php
 └── bootstrap/app.php
 ```
@@ -77,3 +85,103 @@ class EnergyApiService {
   static getInstance(): EnergyApiService { ... }
 }
 ```
+
+## Patrón Factory Method - Implementación
+
+### Backend (Laravel)
+
+La fábrica crea distintos tipos de **fuentes de energía renovable**. Los productos están en `app/Patterns/EnergySources/` y la fábrica en `app/Patterns/Factories/`:
+
+| Elemento | Archivo | Rol |
+|----------|---------|-----|
+| `EnergySource` (abstract) | `app/Patterns/EnergySources/EnergySource.php` | Producto (interfaz) |
+| `SolarEnergy` | `app/Patterns/EnergySources/SolarEnergy.php` | Producto concreto |
+| `WindEnergy` | `app/Patterns/EnergySources/WindEnergy.php` | Producto concreto |
+| `HydroEnergy` | `app/Patterns/EnergySources/HydroEnergy.php` | Producto concreto |
+| `EnergySourceFactory` | `app/Patterns/Factories/EnergySourceFactory.php` | Fábrica (creator) |
+
+**Producto (interfaz)** (`app/Patterns/EnergySources/EnergySource.php`):
+```php
+abstract class EnergySource
+{
+    abstract public function getType(): string;
+    abstract public function getName(): string;
+    abstract public function getEfficiency(): int;
+}
+```
+
+**Producto concreto** (`app/Patterns/EnergySources/SolarEnergy.php`):
+```php
+class SolarEnergy extends EnergySource
+{
+    public function getType(): string { return 'solar'; }
+    public function getName(): string { return 'Energia Solar'; }
+    public function getEfficiency(): int { return 85; }
+}
+```
+
+**Fábrica (creator)** (`app/Patterns/Factories/EnergySourceFactory.php`):
+```php
+class EnergySourceFactory
+{
+    public function create(string $type): EnergySource
+    {
+        return match (strtolower($type)) {
+            'solar' => new SolarEnergy(),
+            'wind'  => new WindEnergy(),
+            'hydro' => new HydroEnergy(),
+            default => throw new \InvalidArgumentException("Tipo no soportado: {$type}"),
+        };
+    }
+}
+```
+
+**Uso en el controlador** (`app/Http/Controllers/EnergyController.php`):
+```php
+public function getSourceCatalog(): JsonResponse
+{
+    $sources = array_map(fn($s) => $s->toArray(), $this->sourceFactory->createAll());
+    return response()->json($sources);
+}
+```
+
+**Uso en la creación de ofertas**: `MarketService::registerOffer` reutiliza la fábrica
+para validar el tipo de energía y guardarlo en la oferta:
+```php
+public function registerOffer(array $data): EnergyOffer
+{
+    $source = (new EnergySourceFactory())->create($data['energyType'] ?? '');
+    $offer->energyType = $source->getType();
+    // ...
+}
+```
+
+### Frontend (React)
+
+La fábrica del frontend elige el **componente de React** según el tipo de energía:
+
+| Elemento | Archivo | Rol |
+|----------|---------|-----|
+| `EnergyCardFactory` | `frontend/src/patterns/factory/EnergyCardFactory.tsx` | Fábrica (creator) |
+| `SolarCard` | `frontend/src/patterns/factory/cards/SolarCard.tsx` | Producto concreto |
+| `WindCard` | `frontend/src/patterns/factory/cards/WindCard.tsx` | Producto concreto |
+| `HydroCard` | `frontend/src/patterns/factory/cards/HydroCard.tsx` | Producto concreto |
+
+**Fábrica** (`frontend/src/patterns/factory/EnergyCardFactory.tsx`):
+```typescript
+class EnergyCardFactory {
+  create(type: string) {
+    switch (type) {
+      case 'solar': return SolarCard;
+      case 'wind':  return WindCard;
+      case 'hydro': return HydroCard;
+      default: throw new Error(`Tipo de energia no soportado: ${type}`);
+    }
+  }
+}
+```
+
+Cada tarjeta tiene un botón **"Publicar oferta"** (`onPublish`) que preselecciona ese
+tipo de energía en el formulario `CreateOffer`. La oferta se envía con `energyType`
+y el backend la valida nuevamente con `EnergySourceFactory` antes de guardarla.
+

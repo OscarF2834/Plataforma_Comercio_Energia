@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 function App() {
   const [refreshKey, setRefreshKey] = useState(0);
+  const [selectedEnergyType, setSelectedEnergyType] = useState<string | null>(null);
 
   const handleOfferCreated = () => {
     setRefreshKey((prev) => prev + 1);
@@ -17,7 +18,11 @@ function App() {
       </header>
       <main style={styles.main}>
         <div style={styles.grid}>
-          <CreateOffer onOfferCreated={handleOfferCreated} />
+          <CreateOffer
+            onOfferCreated={handleOfferCreated}
+            selectedEnergyType={selectedEnergyType}
+            onSelectEnergyType={setSelectedEnergyType}
+          />
           <div key={refreshKey}>
             <EnergyDashboard />
           </div>

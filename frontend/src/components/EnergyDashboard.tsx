@@ -8,6 +8,7 @@ interface EnergyOffer {
   availableKwh: number;
   pricePerKwh: number;
   description?: string;
+  energyType?: string;
   createdAt?: string;
 }
 
@@ -60,6 +61,9 @@ export default function EnergyDashboard() {
                 <strong>{offer.availableKwh}</strong> kWh disponibles
               </p>
               <p style={styles.offerPrice}>${offer.pricePerKwh} COP / kWh</p>
+              {offer.energyType && (
+                <p style={styles.typeTag}>Fuente: {offer.energyType}</p>
+              )}
               {offer.description && (
                 <p style={styles.offerDesc}>{offer.description}</p>
               )}
@@ -117,6 +121,17 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 'bold',
     fontSize: '1.2rem',
     margin: '8px 0',
+  },
+  typeTag: {
+    display: 'inline-block',
+    padding: '4px 10px',
+    borderRadius: '999px',
+    backgroundColor: '#eef3fa',
+    color: '#0f3460',
+    border: '1px solid #cdd9e8',
+    fontSize: '0.8rem',
+    fontWeight: 'bold',
+    margin: '4px 0',
   },
   offerDesc: {
     color: '#666',

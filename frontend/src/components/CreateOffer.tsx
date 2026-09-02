@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import EnergyApiService from '../patterns/singleton/energy-api.service';
+import EnergyCatalog from './EnergyCatalog';
 
 interface Props {
   onOfferCreated: () => void;
+  selectedEnergyType?: string | null;
+  onSelectEnergyType?: (type: string | null) => void;
 }
 
-export default function CreateOffer({ onOfferCreated }: Props) {
+export default function CreateOffer({ onOfferCreated, selectedEnergyType, onSelectEnergyType }: Props) {
   const [producerName, setProducerName] = useState('');
   const [totalKwh, setTotalKwh] = useState('');
   const [pricePerKwh, setPricePerKwh] = useState('');
@@ -24,11 +27,13 @@ export default function CreateOffer({ onOfferCreated }: Props) {
         availableKwh: 0,
         pricePerKwh: parseFloat(pricePerKwh),
         description,
+        energyType: selectedEnergyType || undefined,
       });
       setProducerName('');
       setTotalKwh('');
       setPricePerKwh('');
       setDescription('');
+      onSelectEnergyType?.(null);
       onOfferCreated();
     } catch (error) {
       console.error('Error al crear oferta:', error);
@@ -41,6 +46,12 @@ export default function CreateOffer({ onOfferCreated }: Props) {
     <div style={styles.card}>
       <h2 style={styles.title}>Publicar Excedente de Energia</h2>
       <form onSubmit={handleSubmit} style={styles.form}>
+        <div style={styles.catalogWrapper}>
+          <EnergyCatalog
+            selectedEnergyType={selectedEnergyType}
+            onSelect={onSelectEnergyType ?? (() => {})}
+          />
+        </div>
         <input
           type="text"
           placeholder="Nombre del productor"
@@ -93,6 +104,11 @@ const styles: Record<string, React.CSSProperties> = {
     margin: '0 0 16px 0',
     color: '#1a1a2e',
     fontSize: '1.3rem',
+  },
+  catalogWrapper: {
+    paddingBottom: '16px',
+    marginBottom: '4px',
+    borderBottom: '1px solid #e8e8e8',
   },
   form: {
     display: 'flex',

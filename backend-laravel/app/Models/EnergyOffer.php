@@ -10,6 +10,7 @@ class EnergyOffer
     public float $availableKwh = 0;
     public float $pricePerKwh = 0;
     public string $description = '';
+    public string $energyType = '';
     public string $createdAt = '';
 
     public function toArray(): array
@@ -21,6 +22,7 @@ class EnergyOffer
             'availableKwh' => $this->availableKwh,
             'pricePerKwh' => $this->pricePerKwh,
             'description' => $this->description,
+            'energyType' => $this->energyType,
             'createdAt' => $this->createdAt,
         ];
     }

@@ -5,6 +5,7 @@ interface EnergyOffer {
   availableKwh: number;
   pricePerKwh: number;
   description?: string;
+  energyType?: string;
   createdAt?: string;
 }
 
@@ -51,7 +52,13 @@ class EnergyApiService {
 
   async getMetrics() {
     const response = await fetch(`${this.baseUrl}/energy/metrics`);
-    if (!response.ok) throw new Error('Error al obtener métricas');
+    if (!response.ok) throw new Error('Error al obtener metricas');
+    return response.json();
+  }
+
+  async getSourceCatalog() {
+    const response = await fetch(`${this.baseUrl}/energy/source-catalog`);
+    if (!response.ok) throw new Error('Error al obtener catalogo de fuentes');
     return response.json();
   }
 }
