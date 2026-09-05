@@ -10,6 +10,19 @@ El proyecto está planteado como un **prototipo funcional académico**. No tendr
 
 ---
 
+## 📑 Acceso rápido a los Patrones de Diseño
+
+> Navega directamente a cada patrón implementado en el proyecto desde el índice de la sección de patrones.
+
+- [1. `MarketService` (Singleton — Backend)](#1-marketservice--backend)
+- [2. `LoggerService` (Singleton — Backend)](#2-loggerservice--backend)
+- [3. `ConfigService` (Singleton — Backend)](#3-configservice--backend)
+- [4. `EnergyApiService` (Singleton — Frontend)](#4-energyapiservice--frontend)
+- [5. `EnergySourceFactory` (Factory Method — Backend)](#5-energysourcefactory--backend)
+- [6. `EnergyCardFactory` (Factory Method — Frontend)](#6-energycardfactory--frontend)
+
+---
+
 ## Objetivo principal
 
 Desarrollar una plataforma que permita **gestionar el intercambio de excedentes de energía entre usuarios**, utilizando información relacionada con:
@@ -558,6 +571,18 @@ class EnergyApiService {
 
 ---
 
+## Video explicativo del proyecto
+
+> **Demostración del proyecto**
+>
+> En el siguiente video podrás conocer el funcionamiento del proyecto, observar sus principales características y ver una demostración de su implementación.
+
+**[Ver video completo en YouTube](https://youtu.be/mqDKzU9JejY)**
+
+[![Ver video explicativo](https://img.youtube.com/vi/mqDKzU9JejY/maxresdefault.jpg)](https://youtu.be/mqDKzU9JejY)
+
+---
+
 # Patrón Factory Method
 
 ## ¿Qué es dentro del proyecto?
@@ -611,9 +636,18 @@ El **Factory Method** se usa en el proyecto para **centralizar la creación de o
     └──────────────┘ └───────────┘ └───────────┘
 ```
 
-**Código clave:**
+**Código completo de la fábrica** (`EnergySourceFactory.php`):
 
 ```php
+<?php
+
+namespace App\Patterns\Factories;
+
+use App\Patterns\EnergySources\EnergySource;
+use App\Patterns\EnergySources\HydroEnergy;
+use App\Patterns\EnergySources\SolarEnergy;
+use App\Patterns\EnergySources\WindEnergy;
+
 class EnergySourceFactory
 {
     public const TYPES = ['solar', 'wind', 'hydro'];
@@ -635,11 +669,119 @@ class EnergySourceFactory
 }
 ```
 
-**Uso en `EnergyController`:**
+**Producto abstracto** (`EnergySource.php`):
 
 ```php
-// Endpoint GET /api/energy/source-catalog
-$sources = array_map(fn($source) => $source->toArray(), $this->sourceFactory->createAll());
+<?php
+
+namespace App\Patterns\EnergySources;
+
+abstract class EnergySource
+{
+    abstract public function getType(): string;
+
+    abstract public function getName(): string;
+
+    abstract public function getDescription(): string;
+
+    abstract public function getEfficiency(): int;
+
+    abstract public function getColor(): string;
+
+    public function toArray(): array
+    {
+        return [
+            'type' => $this->getType(),
+            'name' => $this->getName(),
+            'description' => $this->getDescription(),
+            'efficiency' => $this->getEfficiency(),
+            'color' => $this->getColor(),
+        ];
+    }
+}
+```
+
+**Productos concretos** (`SolarEnergy.php`, `WindEnergy.php`, `HydroEnergy.php`):
+
+```php
+// SolarEnergy.php
+class SolarEnergy extends EnergySource
+{
+    public function getType(): string { return 'solar'; }
+    public function getName(): string { return 'Energia Solar'; }
+    public function getDescription(): string
+    {
+        return 'Captura la luz del sol mediante paneles fotovoltaicos para generar electricidad de forma limpia.';
+    }
+    public function getEfficiency(): int { return 85; }
+    public function getColor(): string { return '#f39c12'; }
+}
+
+// WindEnergy.php
+class WindEnergy extends EnergySource
+{
+    public function getType(): string { return 'wind'; }
+    public function getName(): string { return 'Energia Eolica'; }
+    public function getDescription(): string
+    {
+        return 'Aprovecha el viento mediante aerogeneradores para producir electricidad renovable.';
+    }
+    public function getEfficiency(): int { return 70; }
+    public function getColor(): string { return '#3498db'; }
+}
+
+// HydroEnergy.php
+class HydroEnergy extends EnergySource
+{
+    public function getType(): string { return 'hydro'; }
+    public function getName(): string { return 'Energia Hidraulica'; }
+    public function getDescription(): string
+    {
+        return 'Convierte la energia del agua en movimiento en electricidad aprovechando embalses y corrientes.';
+    }
+    public function getEfficiency(): int { return 92; }
+    public function getColor(): string { return '#2ecc71'; }
+}
+```
+
+**Uso 1 — Catálogo en `EnergyController`** (endpoint `GET /api/energy/source-catalog`):
+
+```php
+public function getSourceCatalog(): JsonResponse
+{
+    $sources = array_map(
+        fn($source) => $source->toArray(),
+        $this->sourceFactory->createAll()
+    );
+
+    return response()->json($sources);
+}
+```
+
+**Uso 2 — Validación de tipo al crear una oferta en `MarketService`** (endpoint `POST /api/energy/offers`):
+
+```php
+public function registerOffer(array $data): EnergyOffer
+{
+    // Usa el Factory Method para validar y normalizar el tipo de energia.
+    // Si el tipo no es soportado, la fabrica lanza una excepcion (422).
+    $source = (new EnergySourceFactory())->create($data['energyType'] ?? '');
+
+    $offer = new EnergyOffer();
+    $offer->id = $this->nextId++;
+    $offer->producerName = $data['producerName'];
+    $offer->totalKwh = $data['totalKwh'];
+    $offer->availableKwh = $data['totalKwh'];
+    $offer->pricePerKwh = $data['pricePerKwh'];
+    $offer->description = $data['description'] ?? '';
+    $offer->energyType = $source->getType();
+    $offer->createdAt = now()->toIso8601String();
+
+    $this->offers[] = $offer;
+    $this->save();
+
+    return $offer;
+}
 ```
 
 ---
@@ -681,16 +823,27 @@ $sources = array_map(fn($source) => $source->toArray(), $this->sourceFactory->cr
     └──────────┘   └─────────┘    └─────────┘
 ```
 
-**Código clave:**
+**Código completo de la fábrica** (`EnergyCardFactory.tsx`):
 
-```typescript
+```tsx
+import SolarCard from './cards/SolarCard';
+import WindCard from './cards/WindCard';
+import HydroCard from './cards/HydroCard';
+import type { EnergySource } from './types';
+
+type CardComponent = (props: { source: EnergySource }) => JSX.Element;
+
 class EnergyCardFactory {
-  create(type: string): CardComponent {
+  create(type: string): (props: { source: EnergySource }) => JSX.Element {
     switch (type) {
-      case 'solar': return SolarCard;
-      case 'wind':  return WindCard;
-      case 'hydro': return HydroCard;
-      default:      throw new Error(`Tipo de energia no soportado: ${type}`);
+      case 'solar':
+        return SolarCard;
+      case 'wind':
+        return WindCard;
+      case 'hydro':
+        return HydroCard;
+      default:
+        throw new Error(`Tipo de energia no soportado: ${type}`);
     }
   }
 }
@@ -698,14 +851,134 @@ class EnergyCardFactory {
 // Se exporta una única instancia compartida
 const instance = new EnergyCardFactory();
 export default instance;
+export type { CardComponent };
+```
+
+**Interfaz / Producto** (`types.ts`):
+
+```typescript
+export interface EnergySource {
+  type: string;
+  name: string;
+  description: string;
+  efficiency: number;
+  color: string;
+}
+```
+
+**Productos concretos (componentes de React)** (`cards/SolarCard.tsx`, `cards/WindCard.tsx`, `cards/HydroCard.tsx`):
+
+```tsx
+// cards/SolarCard.tsx
+import type { EnergySource } from '../types';
+
+export default function SolarCard({ source }: { source: EnergySource }) {
+  return (
+    <div style={style}>
+      <div style={{ fontSize: '2rem' }}>☀️</div>
+      <h3 style={titleStyle}>{source.name}</h3>
+      <p style={descStyle}>{source.description}</p>
+      <p style={tagStyle}>
+        Tipo: <strong>Solar</strong> · Rendimiento {source.efficiency}%
+      </p>
+    </div>
+  );
+}
+
+const style: React.CSSProperties = {
+  borderRadius: '12px',
+  padding: '20px',
+  backgroundColor: '#fdf3e3',
+  border: '2px solid #f39c12',
+  color: '#7a5200',
+};
+
+const titleStyle: React.CSSProperties = { margin: '8px 0', color: '#8a5a00' };
+const descStyle: React.CSSProperties = { fontSize: '0.9rem', margin: '6px 0' };
+const tagStyle: React.CSSProperties = { margin: '8px 0 0 0', fontSize: '0.85rem' };
+```
+
+```tsx
+// cards/WindCard.tsx
+import type { EnergySource } from '../types';
+
+export default function WindCard({ source }: { source: EnergySource }) {
+  return (
+    <div style={style}>
+      <div style={{ fontSize: '2rem' }}>🌬️</div>
+      <h3 style={titleStyle}>{source.name}</h3>
+      <p style={descStyle}>{source.description}</p>
+      <p style={tagStyle}>
+        Tipo: <strong>Eolica</strong> · Rendimiento {source.efficiency}%
+      </p>
+    </div>
+  );
+}
+
+const style: React.CSSProperties = {
+  borderRadius: '12px',
+  padding: '20px',
+  backgroundColor: '#eaf4fb',
+  border: '2px solid #3498db',
+  color: '#1f5a85',
+};
+
+const titleStyle: React.CSSProperties = { margin: '8px 0', color: '#1f6fa5' };
+const descStyle: React.CSSProperties = { fontSize: '0.9rem', margin: '6px 0' };
+const tagStyle: React.CSSProperties = { margin: '8px 0 0 0', fontSize: '0.85rem' };
+```
+
+```tsx
+// cards/HydroCard.tsx
+import type { EnergySource } from '../types';
+
+export default function HydroCard({ source }: { source: EnergySource }) {
+  return (
+    <div style={style}>
+      <div style={{ fontSize: '2rem' }}>💧</div>
+      <h3 style={titleStyle}>{source.name}</h3>
+      <p style={descStyle}>{source.description}</p>
+      <p style={tagStyle}>
+        Tipo: <strong>Hidraulica</strong> · Rendimiento {source.efficiency}%
+      </p>
+    </div>
+  );
+}
+
+const style: React.CSSProperties = {
+  borderRadius: '12px',
+  padding: '20px',
+  backgroundColor: '#e9f9f0',
+  border: '2px solid #2ecc71',
+  color: '#1c6b3f',
+};
+
+const titleStyle: React.CSSProperties = { margin: '8px 0', color: '#1e8b4f' };
+const descStyle: React.CSSProperties = { fontSize: '0.9rem', margin: '6px 0' };
+const tagStyle: React.CSSProperties = { margin: '8px 0 0 0', fontSize: '0.85rem' };
 ```
 
 **Uso en `EnergyCatalog` (React):**
 
-```typescript
-// La fábrica elige el componente según el tipo
-const Card = energyCardFactory.create(source.type);
-return <Card key={source.type} source={source} onPublish={onPublish} />;
+```tsx
+import energyCardFactory from '../patterns/factory/EnergyCardFactory';
+// ...
+{sources.map((source) => {
+  // La fábrica elige el componente según el tipo
+  const Card = energyCardFactory.create(source.type);
+  const active = selectedEnergyType === source.type;
+  return (
+    <div
+      key={source.type}
+      onClick={() => onSelect(active ? null : source.type)}
+      style={styles.cardButton(active)}
+      title={active ? 'Clic para deseleccionar' : `Seleccionar ${source.name}`}
+    >
+      {active && <span style={styles.check}>Seleccionado</span>}
+      <Card source={source} />
+    </div>
+  );
+})}
 ```
 
 ---
@@ -768,17 +1041,6 @@ curl -X POST http://localhost:8000/api/energy/offers/1/purchase \
 # Consultar catálogo de fuentes (Factory Method)
 curl http://localhost:8000/api/energy/source-catalog
 ```
-
-##  Video explicativo
-
-> **Demostración del proyecto**
->
-> En el siguiente video podrás conocer el funcionamiento del proyecto, observar sus principales características y ver una demostración de su implementación.
-
-**[Ver video completo en YouTube](https://youtu.be/mqDKzU9JejY)**
-
-[![Ver video explicativo](https://img.youtube.com/vi/mqDKzU9JejY/maxresdefault.jpg)](https://youtu.be/mqDKzU9JejY)
----
 
 ## Proximo Patron (Semana 2)
 
