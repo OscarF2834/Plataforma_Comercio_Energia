@@ -25,16 +25,17 @@ El proyecto está planteado como un **prototipo funcional académico**. No tendr
 
 ## Objetivo principal
 
-Desarrollar una plataforma que permita **gestionar el intercambio de excedentes de energía entre usuarios**, utilizando información relacionada con:
+Desarrollar una plataforma web para gestionar el intercambio de excedentes de energía entre usuarios, integrando la gestión de producción, consumo, excedentes, predicciones, compra, venta e historial de transacciones, con una arquitectura organizada, escalable y mantenible.
 
-- Producción energética.
-- Consumo energético.
-- Excedentes disponibles.
-- Predicciones básicas de producción.
-- Predicciones básicas de consumo.
-- Compra y venta de energía.
-- Historial de transacciones.
+## Objetivos específicos
 
+-Diseñar e implementar una plataforma que permita registrar y gestionar información relacionada con la producción y el consumo energético de los usuarios.
+-Gestionar los excedentes de energía disponibles para facilitar su intercambio entre usuarios de acuerdo con la oferta y demanda registrada.
+-Clasificar y administrar los diferentes tipos de energía disponibles (solar, eolica, hidraulica) dentro de la plataforma, permitiendo incorporar nuevas categorías de manera organizada.
+-Integrar funcionalidades que permitan realizar procesos de compra y venta de los excedentes energéticos entre los usuarios.
+-Registrar y consultar el historial de transacciones realizadas, proporcionando información organizada sobre las operaciones efectuadas.
+-Incorporar mecanismos básicos de predicción de producción y consumo energético para apoyar la toma de decisiones dentro de la plataforma.
+-Evaluar el funcionamiento de la plataforma mediante pruebas funcionales que permitan verificar el correcto cumplimiento de los requerimientos establecidos.
 ---
 
 ## Stack Tecnológico
@@ -980,6 +981,10 @@ import energyCardFactory from '../patterns/factory/EnergyCardFactory';
   );
 })}
 ```
+
+### 🎥 Video explicativo — Implementación del patrón Factory Method
+
+[Ver video en YouTube](https://youtu.be/C1rYGplK0Og)
 
 ---
 
