@@ -1,4 +1,4 @@
-interface EnergyOffer {
+export interface EnergyOffer {
   id?: number;
   producerName: string;
   totalKwh: number;
@@ -59,6 +59,17 @@ class EnergyApiService {
   async getSourceCatalog() {
     const response = await fetch(`${this.baseUrl}/energy/source-catalog`);
     if (!response.ok) throw new Error('Error al obtener catalogo de fuentes');
+    return response.json();
+  }
+
+  async getPredictions(production = 0, consumption = 0) {
+    const params = new URLSearchParams();
+    if (production > 0) params.set('production', String(production));
+    if (consumption > 0) params.set('consumption', String(consumption));
+    const response = await fetch(
+      `${this.baseUrl}/energy/predictions${params.toString() ? `?${params.toString()}` : ''}`
+    );
+    if (!response.ok) throw new Error('Error al obtener predicciones');
     return response.json();
   }
 }

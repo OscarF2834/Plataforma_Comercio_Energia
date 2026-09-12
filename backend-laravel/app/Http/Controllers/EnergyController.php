@@ -6,6 +6,8 @@ use App\Patterns\MarketService;
 use App\Patterns\LoggerService;
 use App\Patterns\ConfigService;
 use App\Patterns\Factories\EnergySourceFactory;
+use App\Patterns\Factories\PredictorFactory;
+use App\Patterns\Predictors\AbstractPredictor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -15,6 +17,7 @@ class EnergyController extends Controller
     private LoggerService $logger;
     private ConfigService $config;
     private EnergySourceFactory $sourceFactory;
+    private PredictorFactory $predictorFactory;
 
     public function __construct()
     {
@@ -22,6 +25,7 @@ class EnergyController extends Controller
         $this->logger = LoggerService::getInstance();
         $this->config = ConfigService::getInstance();
         $this->sourceFactory = new EnergySourceFactory();
+        $this->predictorFactory = new PredictorFactory();
     }
 
     public function createOffer(Request $request): JsonResponse
@@ -87,5 +91,22 @@ class EnergyController extends Controller
         );
 
         return response()->json($sources);
+    }
+
+    public function getPredictions(Request $request): JsonResponse
+    {
+        $production = (float) $request->query('production', 0);
+        $consumption = (float) $request->query('consumption', 0);
+
+        $marketContext = $this->market->getMarketContext();
+
+        $predictions = array_map(
+            fn(AbstractPredictor $predictor) => $predictor->predict(),
+            $this->predictorFactory->createAll($production, $consumption, $marketContext)
+        );
+
+        $this->logger->log("Consulta de predicciones (produccion: {$production}, consumo: {$consumption})");
+
+        return response()->json($predictions);
     }
 }

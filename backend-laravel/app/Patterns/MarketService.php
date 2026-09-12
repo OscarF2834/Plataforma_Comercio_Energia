@@ -110,4 +110,22 @@ class MarketService
             'transactionCount' => $this->transactionCount,
         ];
     }
+
+    public function getMarketContext(): array
+    {
+        $active = array_filter($this->offers, fn($o) => $o->availableKwh > 0);
+        $activeCount = count($active);
+        $totalAvailable = array_sum(array_map(fn($o) => $o->availableKwh, $active));
+        $avgPrice = $activeCount > 0
+            ? round(array_sum(array_map(fn($o) => $o->pricePerKwh, $active)) / $activeCount, 2)
+            : 0.0;
+
+        return [
+            'totalOffers' => count($this->offers),
+            'activeOffers' => $activeCount,
+            'totalAvailableKwh' => round($totalAvailable, 2),
+            'avgPricePerKwh' => $avgPrice,
+            'transactionCount' => $this->transactionCount,
+        ];
+    }
 }

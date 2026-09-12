@@ -9,4 +9,5 @@ Route::prefix('energy')->group(function () {
     Route::post('/offers/{id}/purchase', [EnergyController::class, 'purchaseOffer']);
     Route::get('/metrics', [EnergyController::class, 'getMetrics']);
     Route::get('/source-catalog', [EnergyController::class, 'getSourceCatalog']);
+    Route::get('/predictions', [EnergyController::class, 'getPredictions']);
 });

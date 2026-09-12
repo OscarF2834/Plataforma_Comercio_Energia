@@ -1,5 +1,6 @@
 import CreateOffer from './components/CreateOffer';
 import EnergyDashboard from './components/EnergyDashboard';
+import PredictionPanel from './components/PredictionPanel';
 import { useState } from 'react';
 
 function App() {
@@ -26,6 +27,9 @@ function App() {
           <div key={refreshKey}>
             <EnergyDashboard />
           </div>
+        </div>
+        <div style={styles.predictRow}>
+          <PredictionPanel onSystemChanged={handleOfferCreated} />
         </div>
       </main>
     </div>
@@ -62,6 +66,9 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
     gap: '24px',
+  },
+  predictRow: {
+    marginTop: '24px',
   },
 };
 
