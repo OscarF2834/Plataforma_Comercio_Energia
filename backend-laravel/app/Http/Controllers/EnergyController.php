@@ -50,6 +50,26 @@ class EnergyController extends Controller
         return response()->json($offer->toArray(), 201);
     }
 
+    public function createExpressOffer(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'producerName' => 'required|string',
+            'totalKwh' => 'required|numeric|min:1',
+            'energyType' => 'required|string|in:solar,wind,hydro',
+        ]);
+
+        try {
+            $offer = $this->market->registerExpressOffer($data);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
+
+        $this->logger->incrementOffers();
+        $this->logger->log("Oferta expres creada por {$data['producerName']} ({$offer->energyType})");
+
+        return response()->json($offer->toArray(), 201);
+    }
+
     public function getAvailableOffers(): JsonResponse
     {
         $offers = array_map(

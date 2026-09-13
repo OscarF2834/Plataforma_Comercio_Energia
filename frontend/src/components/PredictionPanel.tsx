@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import EnergyApiService from '../patterns/singleton/energy-api.service';
 import { DailyPredictor } from '../patterns/template/DailyPredictor';
 import { WeeklyPredictor } from '../patterns/template/WeeklyPredictor';
+import { EnergyOfferBuilder } from '../patterns/builder/EnergyOfferBuilder';
+import { OfferDirector } from '../patterns/builder/OfferDirector';
 import type { MarketContext, Prediction } from '../patterns/template/Predictor';
 
 type PredictionSource = 'local' | 'backend';
@@ -73,14 +75,16 @@ export default function PredictionPanel({
     }
     setActing(prediction.period);
     try {
-      const result = await api.createOffer({
+      // El excedente estimado se convierte en una oferta real mediante el
+      // patron Builder: el Director construye la oferta paso a paso.
+      const offer = new OfferDirector(new EnergyOfferBuilder()).buildFromRequest({
         producerName,
         totalKwh: prediction.surplusEstimate,
-        availableKwh: prediction.surplusEstimate,
         pricePerKwh: prediction.market.avgPricePerKwh || 500,
         energyType,
         description: `Excedente estimado por prediccion ${prediction.period === 'daily' ? 'diaria' : 'semanal'}`,
       });
+      const result = await api.createOffer(offer);
       alert(`Oferta #${result.id} publicada correctamente.`);
       onSystemChanged?.();
       await loadFromBackend(production, consumption);

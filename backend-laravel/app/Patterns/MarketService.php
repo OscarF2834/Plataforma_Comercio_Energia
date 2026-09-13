@@ -3,7 +3,8 @@
 namespace App\Patterns;
 
 use App\Models\EnergyOffer;
-use App\Patterns\Factories\EnergySourceFactory;
+use App\Patterns\Builders\EnergyOfferBuilder;
+use App\Patterns\Builders\OfferDirector;
 
 class MarketService
 {
@@ -63,18 +64,29 @@ class MarketService
 
     public function registerOffer(array $data): EnergyOffer
     {
-        // Usa el Factory Method para validar y normalizar el tipo de energia.
-        // Si el tipo no es soportado, la fabrica lanza una excepcion.
-        $source = (new EnergySourceFactory())->create($data['energyType'] ?? '');
+        // Patron Builder: el Director orquesta a EnergyOfferBuilder para
+        // construir la oferta paso a paso (productor, tipo validado con
+        // EnergySourceFactory, cantidad, precio, descripcion).
+        $offer = (new OfferDirector(new EnergyOfferBuilder()))
+            ->buildFromRequest($data);
 
-        $offer = new EnergyOffer();
         $offer->id = $this->nextId++;
-        $offer->producerName = $data['producerName'];
-        $offer->totalKwh = $data['totalKwh'];
-        $offer->availableKwh = $data['totalKwh'];
-        $offer->pricePerKwh = $data['pricePerKwh'];
-        $offer->description = $data['description'] ?? '';
-        $offer->energyType = $source->getType();
+        $offer->createdAt = now()->toIso8601String();
+
+        $this->offers[] = $offer;
+        $this->save();
+        return $offer;
+    }
+
+    public function registerExpressOffer(array $data): EnergyOffer
+    {
+        // Variante del Builder: el Director completa los pasos con valores por
+        // defecto (precio tomado de ConfigService) para construir una oferta
+        // rapida a partir de solo 3 datos: productor, kWh y tipo de energia.
+        $offer = (new OfferDirector(new EnergyOfferBuilder()))
+            ->buildExpressOffer($data['producerName'], (float) $data['totalKwh'], $data['energyType']);
+
+        $offer->id = $this->nextId++;
         $offer->createdAt = now()->toIso8601String();
 
         $this->offers[] = $offer;

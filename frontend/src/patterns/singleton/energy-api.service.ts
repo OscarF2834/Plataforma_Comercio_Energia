@@ -40,6 +40,20 @@ class EnergyApiService {
     return response.json();
   }
 
+  async createExpressOffer(data: {
+    producerName: string;
+    totalKwh: number;
+    energyType: string;
+  }): Promise<EnergyOffer> {
+    const response = await fetch(`${this.baseUrl}/energy/offers/express`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Error al crear oferta expres');
+    return response.json();
+  }
+
   async purchaseOffer(id: number, kwh: number) {
     const response = await fetch(`${this.baseUrl}/energy/offers/${id}/purchase`, {
       method: 'POST',

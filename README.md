@@ -22,6 +22,8 @@ El proyecto está planteado como un **prototipo funcional académico**. No tendr
 - [6. `EnergyCardFactory` (Factory Method — Frontend)](#6-energycardfactory--frontend)
 - [7. `AbstractPredictor` (Abstract Method — Backend)](#7-abstractpredictor--backend)
 - [8. `Predictor` (Abstract Method — Frontend)](#8-predictor--frontend)
+- [9. `EnergyOfferBuilder` / `OfferDirector` (Builder — Backend)](#9-energyofferbuilder--offerdirector--backend)
+- [10. `EnergyOfferBuilder` / `OfferDirector` (Builder — Frontend)](#10-energyofferbuilder--offerdirector--frontend)
 
 ---
 
@@ -47,7 +49,7 @@ Desarrollar una plataforma web para gestionar el intercambio de excedentes de en
 | Frontend | React + TypeScript + Vite |
 | Backend | Laravel + PHP |
 | Base de datos | Memoria (in-memory) persistida en JSON |
-| Patrones de diseño | Singleton, Factory Method, Abstract Method |
+| Patrones de diseño | Singleton, Factory Method, Abstract Method, Builder |
 
 ---
 
@@ -333,6 +335,8 @@ De esta manera, el proyecto permitirá demostrar el funcionamiento de un mercado
 | 6 | [Factory Method](#6-energycardfactory--frontend) · `EnergyCardFactory` | Frontend | [Ir](#6-energycardfactory--frontend) |
 | 7 | [Abstract Method](#7-abstractpredictor--backend) · `AbstractPredictor` | Backend | [Ir](#7-abstractpredictor--backend) |
 | 8 | [Abstract Method](#8-predictor--frontend) · `Predictor` | Frontend | [Ir](#8-predictor--frontend) |
+| 9 | [Builder](#9-energyofferbuilder--offerdirector--backend) · `EnergyOfferBuilder` + `OfferDirector` | Backend | [Ir](#9-energyofferbuilder--offerdirector--backend) |
+| 10 | [Builder](#10-energyofferbuilder--offerdirector--frontend) · `EnergyOfferBuilder` + `OfferDirector` | Frontend | [Ir](#10-energyofferbuilder--offerdirector--frontend) |
 
 ---
 
@@ -1523,6 +1527,508 @@ const handleBuy = async (prediction) => {
 
 ---
 
+# Patrón Builder
+
+## ¿Qué es dentro del proyecto?
+
+El **Builder** se usa en el proyecto para **construir ofertas de excedente energético paso a paso**, separando la construcción de la representación final. Se aplica directamente al **subsistema de compra y venta de excedentes energéticos** y al objetivo de **gestionar y publicar los excedentes**: en lugar de asignar campo por campo una oferta en el momento de publicarla, un **builder** (`EnergyOfferBuilder`) expone pasos (`setProducer`, `setEnergyType`, `setQuantity`, `setPricePerKwh`, `setDescription`) y un **director** (`OfferDirector`) orquesta esos pasos para producir distintas variantes de oferta:
+
+- `buildFromRequest(...)` → oferta **personalizada** con los datos exactos del productor.
+- `buildExpressOffer(...)` → oferta **exprés** en la que el director completa los pasos faltantes (precio, descripción) con valores por defecto tomados de `ConfigService`.
+
+La construcción queda **visible para el usuario**: en el frontend la oferta se define en un asistente (paso 1 productor, paso 2 tipo, paso 3 cantidad, paso 4 precio, paso 5 descripción, paso 6 construir) y el director la entrega construida con los datos completos. En el backend, `MarketService` delega la creación de ofertas en el director/builder, e integra internamente el **Factory Method** (`EnergySourceFactory`) para validar y normalizar el tipo de energía, cumpliendo los objetivos de **clasificar los tipos de energía** y de **comprar/vender excedentes**.
+
+**Implementaciones actuales (2):**
+
+- `EnergyOfferBuilder` + `OfferDirector` — Backend (PHP)
+- `EnergyOfferBuilder` + `OfferDirector` — Frontend (TypeScript)
+
+---
+
+## 9. `EnergyOfferBuilder` / `OfferDirector` — Backend
+
+**Archivo:** `backend-laravel/app/Patterns/Builders/EnergyOfferBuilder.php` y `backend-laravel/app/Patterns/Builders/OfferDirector.php`
+
+**En qué consiste dentro del proyecto:** `EnergyOfferBuilder` es el builder concreto que construye una `EnergyOffer` paso a paso (valida cantidad y precio, y delega la validación del tipo de energía en `EnergySourceFactory`). `OfferDirector` es el director que orquesta los pasos para producir dos variantes: la oferta personalizada (`buildFromRequest`) y la oferta exprés (`buildExpressOffer`), reutilizando la configuración central de `ConfigService`. `MarketService` usa el director al registrar ofertas y expone el endpoint `POST /api/energy/offers/express` para la variante exprés.
+
+**Diagrama UML:**
+
+```
+┌──────────────────────────────────────────────┐
+│                «Director»                    │
+│               OfferDirector                  │
+├──────────────────────────────────────────────┤
+│ - builder : EnergyOfferBuilder               │
+├──────────────────────────────────────────────┤
+│ + buildFromRequest(array) : EnergyOffer      │
+│ + buildExpressOffer(str,float,str,str)       │
+│        : EnergyOffer                         │
+└──────────────────┬───────────────────────────┘
+                   │  orquesta
+                   ▼
+┌──────────────────────────────────────────────┐
+│            «Builder»                         │
+│         EnergyOfferBuilder                   │
+├──────────────────────────────────────────────┤
+│ - offer : EnergyOffer                        │
+├──────────────────────────────────────────────┤
+│ + reset() : self                             │
+│ + setProducer(string) : self                 │
+│ + setEnergyType(string) : self  →Factory     │
+│ + setQuantity(float) : self                  │
+│ + setPricePerKwh(float) : self               │
+│ + setDescription(string) : self              │
+│ + build() : EnergyOffer                      │
+└──────────────────┬───────────────────────────┘
+                   │  produce
+                   ▼
+┌──────────────────────────────────────────────┐
+│            «Producto»                        │
+│           EnergyOffer  (App\Models)          │
+│  producerName · energyType · totalKwh        │
+│  availableKwh · pricePerKwh · description    │
+│  id · createdAt                              │
+└──────────────────────────────────────────────┘
+         ▲                    ▲
+         │  usa               │  usa
+┌──────────────────┐  ┌────────────────────────┐
+│  MarketService   │  │ EnergySourceFactory    │
+│  (Singleton)     │  │ (+ ConfigService)      │
+└──────────────────┘  └────────────────────────┘
+```
+
+**Código completo del builder** (`EnergyOfferBuilder.php`):
+
+```php
+<?php
+
+namespace App\Patterns\Builders;
+
+use App\Models\EnergyOffer;
+use App\Patterns\ConfigService;
+use App\Patterns\Factories\EnergySourceFactory;
+
+class EnergyOfferBuilder
+{
+    private EnergyOffer $offer;
+
+    public function __construct()
+    {
+        $this->reset();
+    }
+
+    public function reset(): self
+    {
+        $this->offer = new EnergyOffer();
+        return $this;
+    }
+
+    public function setProducer(string $producerName): self
+    {
+        $this->offer->producerName = trim($producerName);
+        return $this;
+    }
+
+    public function setEnergyType(string $type): self
+    {
+        // Usa el Factory Method interno para validar y normalizar el tipo.
+        $source = (new EnergySourceFactory())->create($type);
+        $this->offer->energyType = $source->getType();
+        return $this;
+    }
+
+    public function setQuantity(float $totalKwh): self
+    {
+        $maxKwh = (float) ConfigService::getInstance()->get('maxOfferKwh');
+
+        if ($totalKwh <= 0) {
+            throw new \InvalidArgumentException('La cantidad de energia debe ser mayor a cero');
+        }
+        if ($totalKwh > $maxKwh) {
+            throw new \InvalidArgumentException("La cantidad no puede superar {$maxKwh} kWh");
+        }
+
+        $this->offer->totalKwh = $totalKwh;
+        $this->offer->availableKwh = $totalKwh;
+        return $this;
+    }
+
+    public function setPricePerKwh(float $price): self
+    {
+        if ($price < 0) {
+            throw new \InvalidArgumentException('El precio no puede ser negativo');
+        }
+        $this->offer->pricePerKwh = $price;
+        return $this;
+    }
+
+    public function setDescription(string $description): self
+    {
+        $this->offer->description = $description;
+        return $this;
+    }
+
+    public function build(): EnergyOffer
+    {
+        $built = $this->offer;
+        $this->reset();
+        return $built;
+    }
+}
+```
+
+**Código completo del director** (`OfferDirector.php`):
+
+```php
+<?php
+
+namespace App\Patterns\Builders;
+
+use App\Models\EnergyOffer;
+use App\Patterns\ConfigService;
+
+class OfferDirector
+{
+    public function __construct(private EnergyOfferBuilder $builder) {}
+
+    public function buildFromRequest(array $data): EnergyOffer
+    {
+        return $this->builder
+            ->reset()
+            ->setProducer($data['producerName'])
+            ->setEnergyType($data['energyType'] ?? '')
+            ->setQuantity((float) $data['totalKwh'])
+            ->setPricePerKwh((float) $data['pricePerKwh'])
+            ->setDescription($data['description'] ?? '')
+            ->build();
+    }
+
+    public function buildExpressOffer(string $producerName, float $totalKwh, string $type, string $description = ''): EnergyOffer
+    {
+        $defaultPrice = (float) ConfigService::getInstance()->get('defaultPricePerKwh');
+
+        return $this->builder
+            ->reset()
+            ->setProducer($producerName)
+            ->setEnergyType($type)
+            ->setQuantity($totalKwh)
+            ->setPricePerKwh($defaultPrice)
+            ->setDescription($description ?: 'Oferta expres construida por el Director con el precio por defecto del mercado')
+            ->build();
+    }
+}
+```
+
+**Uso integrado en `MarketService`** (`registerOffer` usa el director con la solicitud validada; `registerExpressOffer` crea la variante exprés):
+
+```php
+public function registerOffer(array $data): EnergyOffer
+{
+    // Patron Builder: el Director orquesta a EnergyOfferBuilder para
+    // construir la oferta paso a paso.
+    $offer = (new OfferDirector(new EnergyOfferBuilder()))
+        ->buildFromRequest($data);
+
+    $offer->id = $this->nextId++;
+    $offer->createdAt = now()->toIso8601String();
+
+    $this->offers[] = $offer;
+    $this->save();
+    return $offer;
+}
+
+public function registerExpressOffer(array $data): EnergyOffer
+{
+    // Variante: el Director completa los pasos con valores por defecto
+    // (precio tomado de ConfigService) a partir de solo 3 datos.
+    $offer = (new OfferDirector(new EnergyOfferBuilder()))
+        ->buildExpressOffer($data['producerName'], (float) $data['totalKwh'], $data['energyType']);
+
+    $offer->id = $this->nextId++;
+    $offer->createdAt = now()->toIso8601String();
+
+    $this->offers[] = $offer;
+    $this->save();
+    return $offer;
+}
+```
+
+**Endpoint del director (variante exprés)** (`EnergyController::createExpressOffer`, ruta `POST /api/energy/offers/express`):
+
+```php
+public function createExpressOffer(Request $request): JsonResponse
+{
+    $data = $request->validate([
+        'producerName' => 'required|string',
+        'totalKwh' => 'required|numeric|min:1',
+        'energyType' => 'required|string|in:solar,wind,hydro',
+    ]);
+
+    try {
+        $offer = $this->market->registerExpressOffer($data);
+    } catch (\InvalidArgumentException $e) {
+        return response()->json(['error' => $e->getMessage()], 422);
+    }
+
+    $this->logger->incrementOffers();
+    $this->logger->log("Oferta expres creada por {$data['producerName']} ({$offer->energyType})");
+
+    return response()->json($offer->toArray(), 201);
+}
+```
+
+**Ejemplo de respuesta de la oferta exprés** (el precio se completa con el valor por defecto de `ConfigService`):
+
+```bash
+curl -X POST http://localhost:8000/api/energy/offers/express \
+  -H "Content-Type: application/json" \
+  -d '{"producerName":"Maria Lopez","totalKwh":8,"energyType":"wind"}'
+```
+
+```json
+{
+  "id": 7,
+  "producerName": "Maria Lopez",
+  "totalKwh": 8,
+  "availableKwh": 8,
+  "pricePerKwh": 500,
+  "description": "Oferta expres construida por el Director con el precio por defecto del mercado",
+  "energyType": "wind",
+  "createdAt": "2026-09-13T16:25:10+00:00"
+}
+```
+
+---
+
+## 10. `EnergyOfferBuilder` / `OfferDirector` — Frontend
+
+**Archivo:** `frontend/src/patterns/builder/EnergyOfferBuilder.ts` y `frontend/src/patterns/builder/OfferDirector.ts`
+
+**En qué consiste dentro del proyecto:** Clase de TypeScript equivalente al builder del backend. `EnergyOfferBuilder` construye la oferta paso a paso (`reset`, `setProducer`, `setEnergyType`, `setQuantity`, `setPricePerKwh`, `setDescription`) y expone `snapshot()` para obtener una copia del estado actual. `OfferDirector` orquesta los pasos y genera las mismas dos variantes que el backend (`buildFromRequest` y `buildExpressOffer`).
+
+El componente **`CreateOffer` está ligado al sistema**: organiza el formulario como un **asistente de 6 pasos** con los datos de la oferta. Al publicar:
+- **"Construir y publicar oferta"** usa el director (`buildFromRequest`) para construir la oferta con los datos del asistente y la envía a `POST /api/energy/offers`.
+- **"Publicar oferta expres"** llama al endpoint `POST /api/energy/offers/express` para que el director del backend complete el precio con `ConfigService`.
+
+`PredictionPanel` también usa el director (`buildFromRequest`) al convertir un **excedente estimado por predicción** en una **oferta real** del mercado.
+
+**Diagrama UML:**
+
+```
+┌──────────────────────────────────────────────┐
+│              «Director»                      │
+│             OfferDirector                    │
+├──────────────────────────────────────────────┤
+│ - builder : EnergyOfferBuilder               │
+├──────────────────────────────────────────────┤
+│ + buildFromRequest(OfferData) : EnergyOffer  │
+│ + buildExpressOffer(str,num,str,str)         │
+│        : EnergyOffer                         │
+└──────────────────┬───────────────────────────┘
+                   │  orquesta
+                   ▼
+┌──────────────────────────────────────────────┐
+│             «Builder»                        │
+│        EnergyOfferBuilder                    │
+├──────────────────────────────────────────────┤
+│ - offer : EnergyOffer                        │
+├──────────────────────────────────────────────┤
+│ + reset() : this                             │
+│ + setProducer(string) : this                 │
+│ + setEnergyType(string) : this               │
+│ + setQuantity(number) : this                 │
+│ + setPricePerKwh(number) : this              │
+│ + setDescription(string) : this              │
+│ + snapshot() : EnergyOffer                   │
+│ + build() : EnergyOffer                      │
+└──────────────────┬───────────────────────────┘
+                   │  produce
+                   ▼
+┌──────────────────────────────────────────────┐
+│          «Producto / Interfaz»               │
+│   EnergyOffer (energy-api.service.ts)        │
+│  producerName · energyType · totalKwh        │
+│  availableKwh · pricePerKwh · description    │
+└──────────────────────────────────────────────┘
+         ▲                          ▲
+         │  usa                      │  usa
+┌──────────────────┐       ┌────────────────────────┐
+│   CreateOffer     │       │    PredictionPanel     │
+│  (asistente 6    │       │  (publica excedente     │
+│   pasos)         │       │   estimado)             │
+└──────────────────┘       └────────────────────────┘
+```
+
+**Código completo del builder** (`EnergyOfferBuilder.ts`):
+
+```typescript
+import type { EnergyOffer } from '../singleton/energy-api.service';
+
+export const SUPPORTED_ENERGY_TYPES = ['solar', 'wind', 'hydro'] as const;
+
+export class EnergyOfferBuilder {
+  private offer!: EnergyOffer;
+
+  constructor() {
+    this.reset();
+  }
+
+  reset(): this {
+    this.offer = {
+      producerName: '',
+      totalKwh: 0,
+      availableKwh: 0,
+      pricePerKwh: 0,
+      description: '',
+      energyType: '',
+    };
+    return this;
+  }
+
+  setProducer(producerName: string): this {
+    this.offer.producerName = producerName.trim();
+    return this;
+  }
+
+  setEnergyType(type: string): this {
+    const normalized = type.toLowerCase();
+    if (!(SUPPORTED_ENERGY_TYPES as readonly string[]).includes(normalized)) {
+      throw new Error(`Tipo de energia no soportado: ${type}`);
+    }
+    this.offer.energyType = normalized;
+    return this;
+  }
+
+  setQuantity(totalKwh: number): this {
+    if (!Number.isFinite(totalKwh) || totalKwh <= 0) {
+      throw new Error('La cantidad de energia debe ser mayor a cero');
+    }
+    this.offer.totalKwh = totalKwh;
+    this.offer.availableKwh = totalKwh;
+    return this;
+  }
+
+  setPricePerKwh(price: number): this {
+    if (!Number.isFinite(price) || price < 0) {
+      throw new Error('El precio no puede ser negativo');
+    }
+    this.offer.pricePerKwh = price;
+    return this;
+  }
+
+  setDescription(description: string): this {
+    this.offer.description = description;
+    return this;
+  }
+
+  snapshot(): EnergyOffer {
+    return { ...this.offer };
+  }
+
+  build(): EnergyOffer {
+    const built = this.snapshot();
+    this.reset();
+    return built;
+  }
+}
+```
+
+**Código completo del director** (`OfferDirector.ts`):
+
+```typescript
+import { EnergyOfferBuilder } from './EnergyOfferBuilder';
+import type { EnergyOffer } from '../singleton/energy-api.service';
+
+const DEFAULT_PRICE_PER_KWH = 500; // espejo de ConfigService (backend)
+
+interface OfferData {
+  producerName: string;
+  totalKwh: number;
+  pricePerKwh: number;
+  energyType?: string;
+  description?: string;
+}
+
+export class OfferDirector {
+  constructor(private builder: EnergyOfferBuilder) {}
+
+  buildFromRequest(data: OfferData): EnergyOffer {
+    return this.builder
+      .reset()
+      .setProducer(data.producerName)
+      .setEnergyType(data.energyType ?? 'solar')
+      .setQuantity(data.totalKwh)
+      .setPricePerKwh(data.pricePerKwh)
+      .setDescription(data.description ?? '')
+      .build();
+  }
+
+  buildExpressOffer(
+    producerName: string,
+    totalKwh: number,
+    energyType: string,
+    description = ''
+  ): EnergyOffer {
+    return this.builder
+      .reset()
+      .setProducer(producerName)
+      .setEnergyType(energyType)
+      .setQuantity(totalKwh)
+      .setPricePerKwh(DEFAULT_PRICE_PER_KWH)
+      .setDescription(description || 'Oferta expres construida por el Director con el precio por defecto del mercado')
+      .build();
+  }
+}
+```
+
+**Uso ligado al sistema en `CreateOffer` (asistente de 6 pasos):**
+
+```tsx
+// Con los datos del asistente, el Director construye la oferta
+const buildCustomOffer = () =>
+  new OfferDirector(new EnergyOfferBuilder()).buildFromRequest({
+    producerName: producerName.trim(),
+    totalKwh: qty,
+    pricePerKwh: price,
+    energyType: selectedEnergyType!,
+    description,
+  });
+
+// Publicar: el Director entrega la oferta construida
+const handlePublish = async () => {
+  const offer = buildCustomOffer();
+  const result = await api.createOffer(offer);  // POST /api/energy/offers
+  alert(`Oferta #${result.id} publicada correctamente.`);
+};
+
+// Variante expres: el Director del backend completa el precio por defecto
+const handlePublishExpress = async () => {
+  const result = await api.createExpressOffer({
+    producerName: producerName.trim(),
+    totalKwh: qty,
+    energyType: selectedEnergyType!,
+  });  // POST /api/energy/offers/express
+  alert(`Oferta expres #${result.id} publicada.`);
+};
+```
+
+**Uso ligado al sistema en `PredictionPanel`** (el excedente estimado por predicción se convierte en una oferta real):
+
+```tsx
+const handlePublish = async (prediction: Prediction) => {
+  const offer = new OfferDirector(new EnergyOfferBuilder()).buildFromRequest({
+    producerName,
+    totalKwh: prediction.surplusEstimate,
+    pricePerKwh: prediction.market.avgPricePerKwh || 500,
+    energyType,
+    description: `Excedente estimado por prediccion ${prediction.period}`,
+  });
+  const result = await api.createOffer(offer);
+};
+```
+
+---
+
 # Guía de Ejecución
 
 ## Backend (Laravel)
@@ -1550,7 +2056,8 @@ El frontend corre en `http://localhost:5173`.
 
 | Método | Ruta | Descripción |
 |--------|------|-------------|
-| POST | `/api/energy/offers` | Crear una oferta de excedente |
+| POST | `/api/energy/offers` | Crear una oferta de excedente (construida con el patrón Builder) |
+| POST | `/api/energy/offers/express` | Crear una oferta exprés con el precio por defecto (Builder — variante del Director) |
 | GET | `/api/energy/offers` | Consultar ofertas disponibles |
 | POST | `/api/energy/offers/{id}/purchase` | Comprar energía de una oferta |
 | GET | `/api/energy/metrics` | Ver métricas del mercado |
@@ -1571,6 +2078,11 @@ curl -X POST http://localhost:8000/api/energy/offers \
     "description": "Excedente de paneles solares"
   }'
 
+# Crear oferta expres (Builder — el Director completa el precio por defecto)
+curl -X POST http://localhost:8000/api/energy/offers/express \
+  -H "Content-Type: application/json" \
+  -d '{"producerName": "Maria Lopez", "totalKwh": 8, "energyType": "wind"}'
+
 # Consultar ofertas
 curl http://localhost:8000/api/energy/offers
 
@@ -1590,6 +2102,6 @@ curl http://localhost:8000/api/energy/predictions
 curl "http://localhost:8000/api/energy/predictions?production=30&consumption=50"
 ```
 
-## Proximo Patron (Semana 2)
+## Proximo Patron (Semana 3)
 
 *Proximamente se implementara el siguiente patron de diseno...*
