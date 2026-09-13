@@ -45,6 +45,21 @@ export default function EnergyDashboard() {
     }
   };
 
+  const handleClone = async (offer: EnergyOffer) => {
+    const answer = window.confirm(
+      `Duplicar la oferta de ${offer.producerName} (${offer.availableKwh} kWh a $${offer.pricePerKwh} COP/kWh)?\n\nPatron Prototype: se clonara la oferta en el backend.`
+    );
+    if (!answer) return;
+    try {
+      const clone = await api.cloneOffer(offer.id!);
+      alert(`Oferta #${clone.id} creada como clon de la #${offer.id}.`);
+      fetchOffers();
+    } catch (error) {
+      console.error('Error:', error);
+      alert('No se pudo duplicar la oferta.');
+    }
+  };
+
   if (loading) return <p>Cargando ofertas...</p>;
 
   return (
@@ -72,6 +87,12 @@ export default function EnergyDashboard() {
                 style={styles.buyButton}
               >
                 Comprar Energia
+              </button>
+              <button
+                onClick={() => handleClone(offer)}
+                style={styles.cloneButton}
+              >
+                Duplicar (Prototype)
               </button>
             </div>
           ))}
@@ -149,5 +170,17 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 'bold',
     cursor: 'pointer',
     fontSize: '1rem',
+  },
+  cloneButton: {
+    marginTop: '8px',
+    padding: '10px',
+    width: '100%',
+    borderRadius: '8px',
+    border: '1px solid #8e44ad',
+    backgroundColor: '#f6eefb',
+    color: '#8e44ad',
+    fontWeight: 'bold',
+    cursor: 'pointer',
+    fontSize: '0.95rem',
   },
 };

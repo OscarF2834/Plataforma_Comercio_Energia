@@ -54,6 +54,37 @@ class EnergyApiService {
     return response.json();
   }
 
+  async cloneOffer(id: number, adjustments?: Partial<EnergyOffer>): Promise<EnergyOffer> {
+    const response = await fetch(`${this.baseUrl}/energy/offers/${id}/clone`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(adjustments ?? {}),
+    });
+    if (!response.ok) throw new Error('Error al clonar oferta');
+    return response.json();
+  }
+
+  async getPrototypeTemplates(): Promise<EnergyOffer[]> {
+    const response = await fetch(`${this.baseUrl}/energy/prototype-templates`);
+    if (!response.ok) throw new Error('Error al obtener plantillas Prototype');
+    return response.json();
+  }
+
+  async createOfferFromTemplate(data: {
+    energyType: string;
+    producerName: string;
+    totalKwh: number;
+    pricePerKwh?: number;
+  }): Promise<EnergyOffer> {
+    const response = await fetch(`${this.baseUrl}/energy/offers/clone-template`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Error al crear oferta desde plantilla');
+    return response.json();
+  }
+
   async purchaseOffer(id: number, kwh: number) {
     const response = await fetch(`${this.baseUrl}/energy/offers/${id}/purchase`, {
       method: 'POST',

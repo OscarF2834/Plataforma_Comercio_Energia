@@ -1,6 +1,7 @@
 import CreateOffer from './components/CreateOffer';
 import EnergyDashboard from './components/EnergyDashboard';
 import PredictionPanel from './components/PredictionPanel';
+import OfferPrototypePanel from './components/OfferPrototypePanel';
 import { useState } from 'react';
 
 function App() {
@@ -30,6 +31,9 @@ function App() {
         </div>
         <div style={styles.predictRow}>
           <PredictionPanel onSystemChanged={handleOfferCreated} />
+        </div>
+        <div style={styles.predictRow}>
+          <OfferPrototypePanel onSystemChanged={handleOfferCreated} />
         </div>
       </main>
     </div>

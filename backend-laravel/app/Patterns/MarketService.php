@@ -5,6 +5,8 @@ namespace App\Patterns;
 use App\Models\EnergyOffer;
 use App\Patterns\Builders\EnergyOfferBuilder;
 use App\Patterns\Builders\OfferDirector;
+use App\Patterns\Prototypes\OfferPrototype;
+use App\Patterns\Prototypes\PrototypeRegistry;
 
 class MarketService
 {
@@ -86,6 +88,71 @@ class MarketService
         $offer = (new OfferDirector(new EnergyOfferBuilder()))
             ->buildExpressOffer($data['producerName'], (float) $data['totalKwh'], $data['energyType']);
 
+        $offer->id = $this->nextId++;
+        $offer->createdAt = now()->toIso8601String();
+
+        $this->offers[] = $offer;
+        $this->save();
+        return $offer;
+    }
+
+    public function cloneOffer(int $sourceId, array $adjustments = []): EnergyOffer
+    {
+        $source = null;
+        foreach ($this->offers as $offer) {
+            if ($offer->id === $sourceId) {
+                $source = $offer;
+                break;
+            }
+        }
+        if ($source === null) {
+            throw new \RuntimeException('Oferta origen no encontrada');
+        }
+
+        // Patron Prototype: se clona la oferta origen en lugar de construirla
+        // desde cero. Cada clon recibe su propia copia (id y fecha nuevos).
+        $clonedPrototype = OfferPrototype::from($source)->copy();
+
+        if (!empty($adjustments['producerName'])) {
+            $clonedPrototype->setProducer($adjustments['producerName']);
+        }
+        if (!empty($adjustments['totalKwh'])) {
+            $clonedPrototype->setQuantity((float) $adjustments['totalKwh']);
+        }
+        if (array_key_exists('pricePerKwh', $adjustments) && $adjustments['pricePerKwh'] !== '' && $adjustments['pricePerKwh'] !== null) {
+            $clonedPrototype->setPricePerKwh((float) $adjustments['pricePerKwh']);
+        }
+        if (!empty($adjustments['description'])) {
+            $clonedPrototype->setDescription($adjustments['description']);
+        }
+
+        $offer = $clonedPrototype->getOffer();
+        $offer->id = $this->nextId++;
+        $offer->createdAt = now()->toIso8601String();
+
+        $this->offers[] = $offer;
+        $this->save();
+        return $offer;
+    }
+
+    public function createOfferFromTemplate(string $type, array $data): EnergyOffer
+    {
+        // Patron Prototype: se clona una plantilla registrada en el
+        // PrototypeRegistry (creada con el Factory Method) y se personaliza.
+        $prototype = PrototypeRegistry::getInstance()->getTemplate($type);
+
+        $prototype
+            ->setProducer($data['producerName'])
+            ->setQuantity((float) $data['totalKwh']);
+
+        if (!empty($data['pricePerKwh'])) {
+            $prototype->setPricePerKwh((float) $data['pricePerKwh']);
+        }
+        if (!empty($data['description'])) {
+            $prototype->setDescription($data['description']);
+        }
+
+        $offer = $prototype->getOffer();
         $offer->id = $this->nextId++;
         $offer->createdAt = now()->toIso8601String();
 

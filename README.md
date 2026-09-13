@@ -24,6 +24,8 @@ El proyecto está planteado como un **prototipo funcional académico**. No tendr
 - [8. `Predictor` (Abstract Method — Frontend)](#8-predictor--frontend)
 - [9. `EnergyOfferBuilder` / `OfferDirector` (Builder — Backend)](#9-energyofferbuilder--offerdirector--backend)
 - [10. `EnergyOfferBuilder` / `OfferDirector` (Builder — Frontend)](#10-energyofferbuilder--offerdirector--frontend)
+- [11. `OfferPrototype` / `PrototypeRegistry` (Prototype — Backend)](#11-offerprototype--prototyperegistry--backend)
+- [12. `OfferPrototype` / `PrototypeRegistry` (Prototype — Frontend)](#12-offerprototype--prototyperegistry--frontend)
 
 ---
 
@@ -49,7 +51,7 @@ Desarrollar una plataforma web para gestionar el intercambio de excedentes de en
 | Frontend | React + TypeScript + Vite |
 | Backend | Laravel + PHP |
 | Base de datos | Memoria (in-memory) persistida en JSON |
-| Patrones de diseño | Singleton, Factory Method, Abstract Method, Builder |
+| Patrones de diseño | Singleton, Factory Method, Abstract Method, Builder, Prototype |
 
 ---
 
@@ -337,6 +339,8 @@ De esta manera, el proyecto permitirá demostrar el funcionamiento de un mercado
 | 8 | [Abstract Method](#8-predictor--frontend) · `Predictor` | Frontend | [Ir](#8-predictor--frontend) |
 | 9 | [Builder](#9-energyofferbuilder--offerdirector--backend) · `EnergyOfferBuilder` + `OfferDirector` | Backend | [Ir](#9-energyofferbuilder--offerdirector--backend) |
 | 10 | [Builder](#10-energyofferbuilder--offerdirector--frontend) · `EnergyOfferBuilder` + `OfferDirector` | Frontend | [Ir](#10-energyofferbuilder--offerdirector--frontend) |
+| 11 | [Prototype](#11-offerprototype--prototyperegistry--backend) · `OfferPrototype` + `PrototypeRegistry` | Backend | [Ir](#11-offerprototype--prototyperegistry--backend) |
+| 12 | [Prototype](#12-offerprototype--prototyperegistry--frontend) · `OfferPrototype` + `PrototypeRegistry` | Frontend | [Ir](#12-offerprototype--prototyperegistry--frontend) |
 
 ---
 
@@ -2029,6 +2033,547 @@ const handlePublish = async (prediction: Prediction) => {
 
 ---
 
+# Patrón Prototype
+
+## ¿Qué es dentro del proyecto?
+
+El **Prototype** se usa en el proyecto para **clonar ofertas de excedente energético en lugar de construirlas desde cero**. Una oferta (o una plantilla de oferta) actúa como un **prototipo**; en vez de repetir el proceso de publicación, se le pide que **se copie a sí misma** (`copy()` / `clone()`) y se entrega una **copia independiente**: nuevo `id`, `availableKwh` reiniciado al total y fecha de creación vacía. Modificar el clon **no afecta al prototipo original**.
+
+Se aplica directamente al **subsistema de compra y venta de excedentes energéticos** y a los objetivos de **gestionar los excedentes disponibles** y **clasificar los tipos de energía**: un productor que publica ofertas similares con frecuencia puede **duplicar una oferta existente** o partir de una **plantilla** (prototipo por tipo de energía), ahorrándose capturar campo por campo los mismos datos.
+
+El patrón está **ligado al resto del sistema** e integra otros patrones:
+
+- `OfferPrototype` usa `clone` de PHP / objeto copiado en TypeScript para clonar el modelo `EnergyOffer`.
+- `PrototypeRegistry` (Singleton) mantiene las plantillas y las siembra con el **Factory Method** (`EnergySourceFactory`) y `ConfigService`.
+- La clonación se expone en endpoints reales: `POST /api/energy/offers/{id}/clone` (duplicar oferta existente) y `POST /api/energy/offers/clone-template` (crear a partir de una plantilla).
+
+**Implementaciones actuales (2):**
+
+- `Prototype` + `OfferPrototype` + `PrototypeRegistry` — Backend (PHP)
+- `Prototype` + `OfferPrototype` + `PrototypeRegistry` — Frontend (TypeScript)
+
+---
+
+## 11. `OfferPrototype` / `PrototypeRegistry` — Backend
+
+**Archivo:** `backend-laravel/app/Patterns/Prototypes/Prototype.php`, `backend-laravel/app/Patterns/Prototypes/OfferPrototype.php` y `backend-laravel/app/Patterns/Prototypes/PrototypeRegistry.php`
+
+**En qué consiste dentro del proyecto:** La interfaz `Prototype` declara `copy()`. `OfferPrototype` envuelve una `EnergyOffer` y su `copy()` devuelve una **clonación independiente** (nuevo objeto con `id = null`, `availableKwh` reiniciado al total y `createdAt` vacío) y expone pasos para personalizar el clon (`setProducer`, `setQuantity`, `setPricePerKwh`, `setDescription`). `PrototypeRegistry` (Singleton) guarda **plantillas base** por tipo de energía (sembradas con `EnergySourceFactory` + `ConfigService`) y `getTemplate($type)` devuelve una **copia** de la plantilla, nunca el prototipo almacenado.
+
+`MarketService` lo integra de dos formas: `cloneOffer($id, $adjustments)` cobra un clon de una **oferta existente** del mercado, y `createOfferFromTemplate($type, $data)` clona una **plantilla** del registro y la personaliza. Los endpoints `POST /api/energy/offers/{id}/clone`, `GET /api/energy/prototype-templates` y `POST /api/energy/offers/clone-template` exponen estas operaciones.
+
+**Diagrama UML:**
+
+```
+┌──────────────────────────────────────────────────────┐
+│                   «Singleton»                         │
+│                PrototypeRegistry                      │
+├──────────────────────────────────────────────────────┤
+│ - instance : PrototypeRegistry   (única instancia)   │
+│ - templates : array               (plantilla por tipo)│
+├──────────────────────────────────────────────────────┤
+│ - __construct()            (privado)                  │
+│ - seedTemplates() : void     (usa Factory Method)     │
+│ + getInstance() : PrototypeRegistry                   │
+│ + getTemplate(string) : OfferPrototype (devuelve CLON)│
+│ + listTemplates() : array                            │
+└───────────────────────┬──────────────────────────────┘
+                        │  clona
+                        ▼
+┌───────────────────────────────────────────────┐
+│              «Prototype»                      │
+│              Prototype  (interface)           │
+├───────────────────────────────────────────────┤
+│ + copy() : Prototype        (abstract)        │
+└───────────────────────────────────────────────┘
+         ▲
+         │  implementa
+┌───────────────────────────────────────────────┐
+│            OfferPrototype                     │
+├───────────────────────────────────────────────┤
+│ - offer : EnergyOffer           (prototipo)   │
+├───────────────────────────────────────────────┤
+│ + from(EnergyOffer) : self                    │
+│ + copy() : Prototype  (clon independiente)    │
+│ + setProducer(string) : self                  │
+│ + setQuantity(float) : self                   │
+│ + setPricePerKwh(float) : self                │
+│ + setDescription(string) : self               │
+│ + toArray() : array                           │
+└──────────────────┬────────────────────────────┘
+                   │  envuelve / copia
+                   ▼
+┌───────────────────────────────────────────────┐
+│        «Producto»  EnergyOffer  (App\Models)  │
+│  id=NULL · availableKwh=totalKwh · createdAt='│
+└───────────────────────────────────────────────┘
+         ▲                     ▲
+         │  usa                │  usa
+┌──────────────────┐   ┌────────────────────────┐
+│   MarketService   │   │ Factory Method + Config│
+│  cloneOffer()     │   │ (EnergySourceFactory) │
+│  createFromTemplate│  └────────────────────────┘
+└──────────────────┘
+```
+
+**Código completo de la interfaz** (`Prototype.php`):
+
+```php
+interface Prototype
+{
+    public function copy(): Prototype;
+}
+```
+
+**Código completo del prototipo** (`OfferPrototype.php`):
+
+```php
+class OfferPrototype implements Prototype
+{
+    public function __construct(private EnergyOffer $offer) {}
+
+    public static function from(EnergyOffer $offer): self
+    {
+        return new self($offer);
+    }
+
+    public function getOffer(): EnergyOffer
+    {
+        return $this->offer;
+    }
+
+    public function copy(): Prototype
+    {
+        // Clonación: se copia el objeto y se reinician los campos de ciclo de
+        // vida. El clon es independiente; modificarlo no afecta al original.
+        $copy = clone $this->offer;
+        $copy->id = null;
+        $copy->availableKwh = $copy->totalKwh;
+        $copy->createdAt = '';
+
+        return new self($copy);
+    }
+
+    public function setProducer(string $producerName): self
+    {
+        $this->offer->producerName = trim($producerName);
+        return $this;
+    }
+
+    public function setQuantity(float $totalKwh): self
+    {
+        if ($totalKwh <= 0) {
+            throw new \InvalidArgumentException('La cantidad de energia debe ser mayor a cero');
+        }
+        $this->offer->totalKwh = $totalKwh;
+        $this->offer->availableKwh = $totalKwh;
+        return $this;
+    }
+
+    public function setPricePerKwh(float $price): self
+    {
+        if ($price < 0) {
+            throw new \InvalidArgumentException('El precio no puede ser negativo');
+        }
+        $this->offer->pricePerKwh = $price;
+        return $this;
+    }
+
+    public function setDescription(string $description): self
+    {
+        $this->offer->description = $description;
+        return $this;
+    }
+
+    public function toArray(): array
+    {
+        return $this->offer->toArray();
+    }
+}
+```
+
+**Código completo del registro de prototipos** (`PrototypeRegistry.php`):
+
+```php
+class PrototypeRegistry
+{
+    private static ?PrototypeRegistry $instance = null;
+
+    private array $templates = [];
+
+    private function __construct()
+    {
+        $this->seedTemplates();
+    }
+
+    public static function getInstance(): self
+    {
+        if (self::$instance === null) {
+            self::$instance = new self();
+        }
+        return self::$instance;
+    }
+
+    private function seedTemplates(): void
+    {
+        $defaultPrice = (float) ConfigService::getInstance()->get('defaultPricePerKwh');
+
+        // Usa el Factory Method para crear una plantilla base por tipo de energia.
+        foreach (EnergySourceFactory::TYPES as $type) {
+            $source = (new EnergySourceFactory())->create($type);
+
+            $template = new EnergyOffer();
+            $template->producerName = '';
+            $template->totalKwh = 20;
+            $template->availableKwh = 20;
+            $template->pricePerKwh = $defaultPrice;
+            $template->description = "Plantilla de oferta {$source->getName()}. Al clonarla se crea una copia independiente de este prototipo.";
+            $template->energyType = $source->getType();
+
+            $this->templates[$type] = new OfferPrototype($template);
+        }
+    }
+
+    public function getTemplate(string $type): OfferPrototype
+    {
+        $key = strtolower($type);
+        if (!isset($this->templates[$key])) {
+            throw new \InvalidArgumentException("No existe plantilla para el tipo: {$type}");
+        }
+
+        // Devuelve una CLON del prototipo almacenado (no el prototipo original).
+        return $this->templates[$key]->copy();
+    }
+
+    public function listTemplates(): array
+    {
+        return array_values(array_map(
+            fn(OfferPrototype $template) => $template->getOffer()->toArray(),
+            $this->templates
+        ));
+    }
+}
+```
+
+**Uso integrado en `MarketService`** (clonar oferta existente y clonar plantilla):
+
+```php
+public function cloneOffer(int $sourceId, array $adjustments = []): EnergyOffer
+{
+    $source = null;
+    foreach ($this->offers as $offer) {
+        if ($offer->id === $sourceId) {
+            $source = $offer;
+            break;
+        }
+    }
+    if ($source === null) {
+        throw new \RuntimeException('Oferta origen no encontrada');
+    }
+
+    // Patron Prototype: se clona la oferta origen en lugar de construirla
+    // desde cero. Cada clon recibe su propia copia (id y fecha nuevos).
+    $clonedPrototype = OfferPrototype::from($source)->copy();
+
+    if (!empty($adjustments['producerName'])) {
+        $clonedPrototype->setProducer($adjustments['producerName']);
+    }
+    if (!empty($adjustments['totalKwh'])) {
+        $clonedPrototype->setQuantity((float) $adjustments['totalKwh']);
+    }
+    if (array_key_exists('pricePerKwh', $adjustments) && $adjustments['pricePerKwh'] !== '' && $adjustments['pricePerKwh'] !== null) {
+        $clonedPrototype->setPricePerKwh((float) $adjustments['pricePerKwh']);
+    }
+    if (!empty($adjustments['description'])) {
+        $clonedPrototype->setDescription($adjustments['description']);
+    }
+
+    $offer = $clonedPrototype->getOffer();
+    $offer->id = $this->nextId++;
+    $offer->createdAt = now()->toIso8601String();
+
+    $this->offers[] = $offer;
+    $this->save();
+    return $offer;
+}
+
+public function createOfferFromTemplate(string $type, array $data): EnergyOffer
+{
+    // Patron Prototype: se clona una plantilla registrada en el
+    // PrototypeRegistry (creada con el Factory Method) y se personaliza.
+    $prototype = PrototypeRegistry::getInstance()->getTemplate($type);
+
+    $prototype
+        ->setProducer($data['producerName'])
+        ->setQuantity((float) $data['totalKwh']);
+
+    if (!empty($data['pricePerKwh'])) {
+        $prototype->setPricePerKwh((float) $data['pricePerKwh']);
+    }
+    if (!empty($data['description'])) {
+        $prototype->setDescription($data['description']);
+    }
+
+    $offer = $prototype->getOffer();
+    $offer->id = $this->nextId++;
+    $offer->createdAt = now()->toIso8601String();
+
+    $this->offers[] = $offer;
+    $this->save();
+    return $offer;
+}
+```
+
+**Ejemplo de endpoints** (`EnergyController`):
+
+```php
+// POST /api/energy/offers/{id}/clone — duplica una oferta existente
+public function cloneOffer(int $id, Request $request): JsonResponse
+{
+    $adjustments = $request->validate([
+        'producerName' => 'nullable|string',
+        'totalKwh' => 'nullable|numeric|min:0.1',
+        'pricePerKwh' => 'nullable|numeric|min:0',
+        'description' => 'nullable|string',
+    ]);
+
+    try {
+        // Patron Prototype: el backend clona la oferta existente.
+        $offer = $this->market->cloneOffer($id, $adjustments);
+    } catch (\InvalidArgumentException $e) {
+        return response()->json(['error' => $e->getMessage()], 422);
+    } catch (\RuntimeException $e) {
+        return response()->json(['error' => $e->getMessage()], 404);
+    }
+
+    $this->logger->incrementOffers();
+    $this->logger->log("Oferta #{$id} clonada con el patron Prototype (nueva oferta #{$offer->id})");
+
+    return response()->json($offer->toArray(), 201);
+}
+
+// GET /api/energy/prototype-templates — lista las plantillas del registro
+public function getPrototypeTemplates(): JsonResponse
+{
+    return response()->json(PrototypeRegistry::getInstance()->listTemplates());
+}
+```
+
+**Ejemplo de respuesta** (clon de la oferta #1 ajustando la cantidad a 10 kWh):
+
+```json
+{
+  "id": 10,
+  "producerName": "Juan Perez",
+  "totalKwh": 10,
+  "availableKwh": 10,
+  "pricePerKwh": 600,
+  "description": "Excedente de paneles solares",
+  "energyType": "solar",
+  "createdAt": "2026-09-13T21:25:31+00:00"
+}
+```
+
+> El clon recibe un `id` nuevo, `availableKwh` reiniciado al `totalKwh` y la fecha de creación de la clonación. La oferta origen (id 1) **no se modifica**.
+
+---
+
+## 12. `OfferPrototype` / `PrototypeRegistry` — Frontend
+
+**Archivo:** `frontend/src/patterns/prototype/Prototype.ts`, `frontend/src/patterns/prototype/OfferPrototype.ts` y `frontend/src/patterns/prototype/PrototypeRegistry.ts`
+
+**En qué consiste dentro del proyecto:** Equivalente en TypeScript al prototipo del backend. `Prototype` es una interfaz genérica (`copy()`); `OfferPrototype` envuelve una `EnergyOffer`, su `copy()` devuelve una **copia independiente** (spread + reinicio de `id`, `availableKwh` y `createdAt`) y expone los personalizadores (`setProducer`, `setQuantity`, `setPricePerKwh`, `setDescription`); `PrototypeRegistry` usa el cliente HTTP (Singleton) para obtener las plantillas del backend y `cloneTemplate(type)` devuelve un **clon** local de la plantilla seleccionada.
+
+El componente **`OfferPrototypePanel` está ligado al sistema**: muestra un catálogo con las **plantillas** (`GET /api/energy/prototype-templates`), al presionar **"Clonar en el frontend (TypeScript)"** ejecuta el patrón en el navegador (`OfferPrototype.from(template).copy()`) y muestra el clon (id `undefined`, kWh disponibles = total), permitiendo editar productor, cantidad y precio. Al presionar **"Publicar clon"** envía `POST /api/energy/offers/clone-template` para que el **backend (PHP)** clone la plantilla con su propio `PrototypeRegistry`; el dashboard se actualiza automáticamente.
+
+Además, `EnergyDashboard` ofrece el botón **"Duplicar (Prototype)"** en cada oferta, que llama a `POST /api/energy/offers/{id}/clone` para duplicar en el backend una oferta existente.
+
+**Diagrama UML:**
+
+```
+┌───────────────────────────────────────────────┐
+│                 «Prototype»                   │
+│       Prototype<T>  (interface)               │
+├───────────────────────────────────────────────┤
+│ + copy() : T                 (abstract)       │
+└───────────────────────────────────────────────┘
+         ▲
+         │  implementa
+┌───────────────────────────────────────────────┐
+│             OfferPrototype                    │
+├───────────────────────────────────────────────┤
+│ - offer : EnergyOffer          (prototipo)    │
+├───────────────────────────────────────────────┤
+│ + from(EnergyOffer) : OfferPrototype          │
+│ + copy() : OfferPrototype  (clon indepen.)    │
+│ + setProducer(string) : this                  │
+│ + setQuantity(number) : this                  │
+│ + setPricePerKwh(number) : this               │
+│ + setDescription(string) : this               │
+│ + toOffer() : EnergyOffer                     │
+└──────────────────┬────────────────────────────┘
+                   │  usa
+                   ▼
+┌───────────────────────────────────────────────┐
+│            PrototypeRegistry                  │
+├───────────────────────────────────────────────┤
+│ - templates : EnergyOffer[]  (plantillas)     │
+├───────────────────────────────────────────────┤
+│ + loadTemplates() : PrototypeTemplate[]       │
+│ + cloneTemplate(type) : OfferPrototype (CLON) │
+└──────┬────────────────────────────────────────┘
+       │  usa (Singleton)
+       ▼
+┌───────────────────────────────────────────────┐
+│ EnergyApiService (cliente HTTP — Singleton)   │
+│ GET  /prototype-templates                     │
+│ POST /offers/clone-template                   │
+│ POST /offers/{id}/clone                       │
+└───────────────────────────────────────────────┘
+         ▲              ▲               ▲
+         │              │               │
+┌────────────────┐ ┌────────────────┐ ┌────────────────┐
+│OfferPrototypePanel││ EnergyDashboard││ (interacción   │
+│ (clon local TS  │ │ (Duplicar,     ││  usuario)       │
+│  + publicar PHP)│ │  clon backend) ││                 │
+└────────────────┘ └────────────────┘ └────────────────┘
+```
+
+**Código completo del prototipo** (`OfferPrototype.ts`):
+
+```typescript
+export class OfferPrototype implements Prototype<OfferPrototype> {
+  constructor(private offer: EnergyOffer) {}
+
+  static from(offer: EnergyOffer): OfferPrototype {
+    return new OfferPrototype({ ...offer });
+  }
+
+  getOffer(): EnergyOffer {
+    return this.offer;
+  }
+
+  copy(): OfferPrototype {
+    // Clonacion: copia independiente del prototipo. Modificar el clon no afecta
+    // al original porque no comparten referencia.
+    const copy: EnergyOffer = {
+      ...this.offer,
+      id: undefined,
+      availableKwh: this.offer.totalKwh,
+      createdAt: undefined,
+    };
+    return new OfferPrototype(copy);
+  }
+
+  setProducer(producerName: string): this {
+    this.offer.producerName = producerName.trim();
+    return this;
+  }
+
+  setQuantity(totalKwh: number): this {
+    if (!Number.isFinite(totalKwh) || totalKwh <= 0) {
+      throw new Error('La cantidad de energia debe ser mayor a cero');
+    }
+    this.offer.totalKwh = totalKwh;
+    this.offer.availableKwh = totalKwh;
+    return this;
+  }
+
+  setPricePerKwh(price: number): this {
+    if (!Number.isFinite(price) || price < 0) {
+      throw new Error('El precio no puede ser negativo');
+    }
+    this.offer.pricePerKwh = price;
+    return this;
+  }
+
+  setDescription(description: string): this {
+    this.offer.description = description;
+    return this;
+  }
+
+  toOffer(): EnergyOffer {
+    return { ...this.offer };
+  }
+}
+```
+
+**Código completo del registro** (`PrototypeRegistry.ts`):
+
+```typescript
+export class PrototypeRegistry {
+  private templates: EnergyOffer[] = [];
+
+  // El registro usa el cliente HTTP (Singleton) para obtener las plantillas
+  // que el backend mantiene en su PrototypeRegistry (PHP).
+  async loadTemplates(): Promise<PrototypeTemplate[]> {
+    const api = EnergyApiService.getInstance();
+    const data = await api.getPrototypeTemplates();
+    this.templates = data;
+    return data.map((t) => ({
+      templateId: `${t.energyType}-template`,
+      energyType: t.energyType ?? '',
+    }));
+  }
+
+  // Devuelve un CLON del prototipo de la plantilla seleccionada.
+  async cloneTemplate(type: string): Promise<OfferPrototype> {
+    if (this.templates.length === 0) {
+      await this.loadTemplates();
+    }
+    const source = this.templates.find((t) => t.energyType === type);
+    if (!source) throw new Error(`No existe plantilla para el tipo: ${type}`);
+    return OfferPrototype.from(source).copy();
+  }
+}
+
+const prototypeRegistry = new PrototypeRegistry();
+export default prototypeRegistry;
+```
+
+**Uso ligado al sistema en `OfferPrototypePanel` (React):**
+
+```tsx
+// Clonar la plantilla en el FRONTEND con el patron Prototype (TypeScript)
+const handleCloneLocal = () => {
+  const template = templates.find((t) => t.energyType === selectedType);
+  if (!template) return;
+  const clone = OfferPrototype.from(template).copy();   // → copia independiente
+  const clonedOffer = clone.getOffer();
+  setLocalClone(clonedOffer);                            // muestra id=undefined, kWh=total
+  setProducerName(clonedOffer.producerName);
+  setTotalKwh(String(clonedOffer.totalKwh));
+  setPricePerKwh(String(clonedOffer.pricePerKwh));
+};
+
+// Publicar el clon: el BACKEND clona la plantilla con su PrototypeRegistry (PHP)
+const handlePublish = async () => {
+  const result = await api.createOfferFromTemplate({
+    energyType: selectedType,
+    producerName: producerName.trim(),
+    totalKwh: qty,
+    pricePerKwh: price >= 0 ? price : undefined,
+  });
+  alert(`Oferta #${result.id} creada como clon de la plantilla ${result.energyType}.`);
+  onSystemChanged?.();   // refresca el dashboard
+  handleCloneLocal();    // actualiza el clon local con el nuevo estado
+};
+```
+
+**Uso ligado al sistema en `EnergyDashboard` (duplicar oferta existente):**
+
+```tsx
+const handleClone = async (offer: EnergyOffer) => {
+  const answer = window.confirm(`Duplicar la oferta de ${offer.producerName}...`);
+  if (!answer) return;
+  const clone = await api.cloneOffer(offer.id!);   // POST /offers/{id}/clone
+  alert(`Oferta #${clone.id} creada como clon de la #${offer.id}.`);
+  fetchOffers();
+};
+```
+
+---
+
 # Guía de Ejecución
 
 ## Backend (Laravel)
@@ -2058,10 +2603,13 @@ El frontend corre en `http://localhost:5173`.
 |--------|------|-------------|
 | POST | `/api/energy/offers` | Crear una oferta de excedente (construida con el patrón Builder) |
 | POST | `/api/energy/offers/express` | Crear una oferta exprés con el precio por defecto (Builder — variante del Director) |
+| POST | `/api/energy/offers/{id}/clone` | Duplicar una oferta existente (Prototype — clon del backend) |
+| POST | `/api/energy/offers/clone-template` | Crear una oferta clonando una plantilla del `PrototypeRegistry` |
 | GET | `/api/energy/offers` | Consultar ofertas disponibles |
 | POST | `/api/energy/offers/{id}/purchase` | Comprar energía de una oferta |
 | GET | `/api/energy/metrics` | Ver métricas del mercado |
 | GET | `/api/energy/source-catalog` | Ver catálogo de fuentes de energía (Factory Method) |
+| GET | `/api/energy/prototype-templates` | Ver las plantillas de oferta (Prototype — `PrototypeRegistry`) |
 | GET | `/api/energy/predictions` | Ver predicciones de producción/consumo (Abstract Method) ligadas al estado real del mercado. Acepta `?production=&consumption=` |
 
 ## Ejemplo de Request
@@ -2083,6 +2631,19 @@ curl -X POST http://localhost:8000/api/energy/offers/express \
   -H "Content-Type: application/json" \
   -d '{"producerName": "Maria Lopez", "totalKwh": 8, "energyType": "wind"}'
 
+# Duplicar una oferta existente (Prototype — clon del backend. totalKwh/pricePerKwh opcionales)
+curl -X POST http://localhost:8000/api/energy/offers/1/clone \
+  -H "Content-Type: application/json" \
+  -d '{"totalKwh": 10}'
+
+# Consultar las plantillas del PrototypeRegistry
+curl http://localhost:8000/api/energy/prototype-templates
+
+# Crear una oferta clonando una plantilla (Prototype — clon del backend)
+curl -X POST http://localhost:8000/api/energy/offers/clone-template \
+  -H "Content-Type: application/json" \
+  -d '{"energyType": "wind", "producerName": "Maria Lopez", "totalKwh": 8, "pricePerKwh": 700}'
+
 # Consultar ofertas
 curl http://localhost:8000/api/energy/offers
 
@@ -2102,6 +2663,16 @@ curl http://localhost:8000/api/energy/predictions
 curl "http://localhost:8000/api/energy/predictions?production=30&consumption=50"
 ```
 
-## Proximo Patron (Semana 3)
+## Patrones de diseño implementados
 
-*Proximamente se implementara el siguiente patron de diseno...*
+Hasta el momento se han implementado y documentado en este README los siguientes patrones:
+
+| # | Patrón | Implementaciones |
+|---|--------|------------------|
+| 1 | **Singleton** | `MarketService`, `LoggerService`, `ConfigService`, `EnergyApiService` |
+| 2 | **Factory Method** | `EnergySourceFactory`, `EnergyCardFactory`, `PredictorFactory` |
+| 3 | **Abstract Method / Template Method** | `AbstractPredictor` + `DailyPredictor`/`WeeklyPredictor` (PHP), `Predictor` + variantes (TS) |
+| 4 | **Builder** | `EnergyOfferBuilder` + `OfferDirector` (PHP y TS) |
+| 5 | **Prototype** | `Prototype`, `OfferPrototype`, `PrototypeRegistry` (PHP y TS) |
+
+*Próximamente se implementará el siguiente patrón de diseño...*

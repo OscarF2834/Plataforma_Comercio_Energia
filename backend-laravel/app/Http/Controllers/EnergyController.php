@@ -8,6 +8,7 @@ use App\Patterns\ConfigService;
 use App\Patterns\Factories\EnergySourceFactory;
 use App\Patterns\Factories\PredictorFactory;
 use App\Patterns\Predictors\AbstractPredictor;
+use App\Patterns\Prototypes\PrototypeRegistry;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -128,5 +129,56 @@ class EnergyController extends Controller
         $this->logger->log("Consulta de predicciones (produccion: {$production}, consumo: {$consumption})");
 
         return response()->json($predictions);
+    }
+
+    public function cloneOffer(int $id, Request $request): JsonResponse
+    {
+        $adjustments = $request->validate([
+            'producerName' => 'nullable|string',
+            'totalKwh' => 'nullable|numeric|min:0.1',
+            'pricePerKwh' => 'nullable|numeric|min:0',
+            'description' => 'nullable|string',
+        ]);
+
+        try {
+            // Patron Prototype: el backend clona la oferta existente.
+            $offer = $this->market->cloneOffer($id, $adjustments);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        } catch (\RuntimeException $e) {
+            return response()->json(['error' => $e->getMessage()], 404);
+        }
+
+        $this->logger->incrementOffers();
+        $this->logger->log("Oferta #{$id} clonada con el patron Prototype (nueva oferta #{$offer->id})");
+
+        return response()->json($offer->toArray(), 201);
+    }
+
+    public function getPrototypeTemplates(): JsonResponse
+    {
+        return response()->json(PrototypeRegistry::getInstance()->listTemplates());
+    }
+
+    public function createOfferFromTemplate(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'energyType' => 'required|string|in:solar,wind,hydro',
+            'producerName' => 'required|string',
+            'totalKwh' => 'required|numeric|min:1',
+            'pricePerKwh' => 'nullable|numeric|min:0',
+        ]);
+
+        try {
+            // Patron Prototype: el backend clona la plantilla registrada.
+            $offer = $this->market->createOfferFromTemplate($data['energyType'], $data);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
+
+        $this->logger->incrementOffers();
+        $this->logger->log("Oferta creada clonando la plantilla {$offer->energyType} (Prototype) por {$offer->producerName}");
+
+        return response()->json($offer->toArray(), 201);
     }
 }
