@@ -2572,6 +2572,16 @@ const handleClone = async (offer: EnergyOffer) => {
 };
 ```
 
+## Video explicativo de los 3 metodos
+
+> **Demostración del proyecto**
+>
+> En el siguiente video podrás conocer el funcionamiento del proyecto, observar sus principales características y ver una demostración de su implementación.
+
+**[Ver video completo en YouTube](https://youtu.be/IJZKBrkxqkU)**
+
+
+
 ---
 
 # Guía de Ejecución
