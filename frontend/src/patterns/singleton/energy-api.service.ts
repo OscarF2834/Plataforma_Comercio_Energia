@@ -9,6 +9,38 @@ export interface EnergyOffer {
   createdAt?: string;
 }
 
+export interface DeviceInfo {
+  deviceId: string;
+  provider: string;
+  deviceType: string;
+  displayName: string;
+  online: boolean;
+  metricLabels: Record<string, string>;
+}
+
+export interface TelemetrySummary {
+  totalDevices: number;
+  onlineDevices: number;
+  offlineDevices: number;
+  totalPowerKw: number;
+  totalEnergyKwh: number;
+  devicesByProvider: Record<string, number>;
+}
+
+export interface SettlementMatrix {
+  profiles: { key: string; name: string; description: string }[];
+  currencies: {
+    code: string;
+    symbol: string;
+    label: string;
+    decimals: number;
+    taxRate: number;
+    usdRate: number;
+  }[];
+  combinations: string[];
+  totalCombinations: number;
+}
+
 class EnergyApiService {
   private static instance: EnergyApiService;
   private baseUrl: string;
@@ -115,6 +147,50 @@ class EnergyApiService {
       `${this.baseUrl}/energy/predictions${params.toString() ? `?${params.toString()}` : ''}`
     );
     if (!response.ok) throw new Error('Error al obtener predicciones');
+    return response.json();
+  }
+
+  // Patron Adapter: inventario y telemetria YA normalizados por los Adapter
+  // del backend. El frontend tiene sus propios Adapter (src/patterns/adapter)
+  // que consultan los endpoints /legacy/* sin pasar por este servicio.
+  async getDevices(): Promise<DeviceInfo[]> {
+    const response = await fetch(`${this.baseUrl}/energy/devices`);
+    if (!response.ok) throw new Error('Error al obtener dispositivos IoT');
+    return response.json();
+  }
+
+  async getDeviceTelemetry<T = unknown>(deviceId: string): Promise<T> {
+    const response = await fetch(`${this.baseUrl}/energy/devices/${deviceId}/telemetry`);
+    if (!response.ok) throw new Error('Error al obtener telemetria del dispositivo');
+    return response.json();
+  }
+
+  async getTelemetrySummary(): Promise<TelemetrySummary> {
+    const response = await fetch(`${this.baseUrl}/energy/devices/telemetry/summary`);
+    if (!response.ok) throw new Error('Error al obtener resumen de telemetria');
+    return response.json();
+  }
+
+  // Patron Bridge: matriz de combinaciones perfil x moneda y emision de la
+  // liquidacion (las mismas clases existen tambien en el frontend).
+  async getSettlementMatrix(): Promise<SettlementMatrix> {
+    const response = await fetch(`${this.baseUrl}/energy/settlements/matrix`);
+    if (!response.ok) throw new Error('Error al obtener la matriz de liquidaciones');
+    return response.json();
+  }
+
+  async quoteSettlement(data: {
+    profile: string;
+    currency: string;
+    kwh: number;
+    pricePerKwh: number;
+  }) {
+    const response = await fetch(`${this.baseUrl}/energy/settlements/quote`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Error al emitir la liquidacion');
     return response.json();
   }
 }

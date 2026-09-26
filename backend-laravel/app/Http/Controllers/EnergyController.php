@@ -5,6 +5,9 @@ namespace App\Http\Controllers;
 use App\Patterns\MarketService;
 use App\Patterns\LoggerService;
 use App\Patterns\ConfigService;
+use App\Patterns\Adapters\DeviceGatewayRegistry;
+use App\Patterns\Adapters\DeviceMonitorService;
+use App\Patterns\Bridges\SettlementService;
 use App\Patterns\Factories\EnergySourceFactory;
 use App\Patterns\Factories\PredictorFactory;
 use App\Patterns\Predictors\AbstractPredictor;
@@ -19,6 +22,9 @@ class EnergyController extends Controller
     private ConfigService $config;
     private EnergySourceFactory $sourceFactory;
     private PredictorFactory $predictorFactory;
+    private DeviceMonitorService $devices;
+    private DeviceGatewayRegistry $deviceRegistry;
+    private SettlementService $settlements;
 
     public function __construct()
     {
@@ -27,6 +33,15 @@ class EnergyController extends Controller
         $this->config = ConfigService::getInstance();
         $this->sourceFactory = new EnergySourceFactory();
         $this->predictorFactory = new PredictorFactory();
+
+        // Patron Adapter: el registro arma un Adapter por dispositivo y el
+        // cliente recibe gateways que solo cumpla la interfaz DeviceGateway.
+        $this->deviceRegistry = new DeviceGatewayRegistry();
+        $this->devices = new DeviceMonitorService($this->deviceRegistry->all());
+
+        // Patron Bridge: el cliente compone abstraccion (EnergyBill) e
+        // implementor (CurrencyBridge) segun el perfil y la moneda pedidos.
+        $this->settlements = new SettlementService();
     }
 
     public function createOffer(Request $request): JsonResponse
@@ -180,5 +195,74 @@ class EnergyController extends Controller
         $this->logger->log("Oferta creada clonando la plantilla {$offer->energyType} (Prototype) por {$offer->producerName}");
 
         return response()->json($offer->toArray(), 201);
+    }
+
+    public function getDevices(): JsonResponse
+    {
+        // Patron Adapter: inventario ya normalizado. El controlador solo
+        // conoce la interfaz DeviceGateway, no los dispositivos heredados.
+        $devices = $this->devices->listDevices();
+
+        $this->logger->log('Consulta del inventario IoT: ' . count($devices) . ' dispositivos (Adapter)');
+
+        return response()->json($devices);
+    }
+
+    public function getDeviceTelemetry(string $deviceId): JsonResponse
+    {
+        try {
+            $telemetry = $this->devices->readTelemetry($deviceId);
+        } catch (\RuntimeException $e) {
+            return response()->json(['error' => $e->getMessage()], 404);
+        }
+
+        $this->logger->log("Telemetria de {$deviceId} normalizada por el Adapter ({$telemetry->provider})");
+
+        return response()->json($telemetry->toArray());
+    }
+
+    public function getTelemetrySummary(): JsonResponse
+    {
+        return response()->json($this->devices->getSummary());
+    }
+
+    public function getLegacyMeterDumps(): JsonResponse
+    {
+        // Datos crudos del Adaptee (registros SCADA). Se exponen sin adaptar
+        // para mostrar el "antes" y consumir el Adapter del frontend.
+        return response()->json($this->deviceRegistry->rawMeterDumps());
+    }
+
+    public function getLegacyInverterPolls(): JsonResponse
+    {
+        // Datos crudos del Adaptee (payload JSON del inversor).
+        return response()->json($this->deviceRegistry->rawInverterPolls());
+    }
+
+    public function getSettlementMatrix(): JsonResponse
+    {
+        // Patron Bridge: perfiles x monedas soportados.
+        return response()->json($this->settlements->getMatrix());
+    }
+
+    public function quoteSettlement(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'profile' => 'required|string|in:residential,commercial',
+            'currency' => 'required|string|in:COP,USD,EUR',
+            'kwh' => 'required|numeric|min:0.1',
+            'pricePerKwh' => 'required|numeric|min:0',
+        ]);
+
+        try {
+            // Patron Bridge: el cliente conecta EnergyBill + CurrencyBridge.
+            $bill = $this->settlements->quote($data['profile'], $data['currency'], $data);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
+
+        $this->logger->log("Liquidacion {$bill['profile']} en {$bill['currency']} por {$data['kwh']} kWh: {$bill['totalFormatted']} (Bridge)");
+
+        return response()->json($bill, 201);
     }
 }

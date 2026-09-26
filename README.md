@@ -26,6 +26,10 @@ El proyecto está planteado como un **prototipo funcional académico**. No tendr
 - [10. `EnergyOfferBuilder` / `OfferDirector` (Builder — Frontend)](#10-energyofferbuilder--offerdirector--frontend)
 - [11. `OfferPrototype` / `PrototypeRegistry` (Prototype — Backend)](#11-offerprototype--prototyperegistry--backend)
 - [12. `OfferPrototype` / `PrototypeRegistry` (Prototype — Frontend)](#12-offerprototype--prototyperegistry--frontend)
+- [13. `DeviceGateway` / `DeviceMonitorService` (Adapter — Backend)](#13-devicegateway--devicemonitorservice--backend)
+- [14. `DeviceGateway` / `DevicePanel` (Adapter — Frontend)](#14-devicegateway--devicepanel--frontend)
+- [15. `EnergyBill` / `CurrencyBridge` (Bridge — Backend)](#15-energybill--currencybridge--backend)
+- [16. `EnergyBill` / `CurrencyBridge` (Bridge — Frontend)](#16-energybill--currencybridge--frontend)
 
 ---
 
@@ -51,7 +55,7 @@ Desarrollar una plataforma web para gestionar el intercambio de excedentes de en
 | Frontend | React + TypeScript + Vite |
 | Backend | Laravel + PHP |
 | Base de datos | Memoria (in-memory) persistida en JSON |
-| Patrones de diseño | Singleton, Factory Method, Abstract Method, Builder, Prototype |
+| Patrones de diseño | Singleton, Factory Method, Abstract Method, Builder, Prototype, Adapter, Bridge |
 
 ---
 
@@ -341,6 +345,10 @@ De esta manera, el proyecto permitirá demostrar el funcionamiento de un mercado
 | 10 | [Builder](#10-energyofferbuilder--offerdirector--frontend) · `EnergyOfferBuilder` + `OfferDirector` | Frontend | [Ir](#10-energyofferbuilder--offerdirector--frontend) |
 | 11 | [Prototype](#11-offerprototype--prototyperegistry--backend) · `OfferPrototype` + `PrototypeRegistry` | Backend | [Ir](#11-offerprototype--prototyperegistry--backend) |
 | 12 | [Prototype](#12-offerprototype--prototyperegistry--frontend) · `OfferPrototype` + `PrototypeRegistry` | Frontend | [Ir](#12-offerprototype--prototyperegistry--frontend) |
+| 13 | [Adapter](#13-devicegateway--devicemonitorservice--backend) · `DeviceGateway` + `DeviceMonitorService` | Backend | [Ir](#13-devicegateway--devicemonitorservice--backend) |
+| 14 | [Adapter](#14-devicegateway--devicepanel--frontend) · `DeviceGateway` + `DevicePanel` | Frontend | [Ir](#14-devicegateway--devicepanel--frontend) |
+| 15 | [Bridge](#15-energybill--currencybridge--backend) · `EnergyBill` + `CurrencyBridge` | Backend | [Ir](#15-energybill--currencybridge--backend) |
+| 16 | [Bridge](#16-energybill--currencybridge--frontend) · `EnergyBill` + `CurrencyBridge` | Frontend | [Ir](#16-energybill--currencybridge--frontend) |
 
 ---
 
@@ -2584,6 +2592,787 @@ const handleClone = async (offer: EnergyOffer) => {
 
 ---
 
+# Patrón Adapter
+
+## ¿Qué es dentro del proyecto?
+
+El **Adapter** se usa para integrar los **dispositivos IoT domésticos** (subsistema 3) cuyos formatos de datos **no coinciden** con los que espera el dominio. Cada fabricante habla su propio idioma: el medidor SCADA legado entrega **registros Modbus con unidades heredadas** (decivatios, centiamperios, hectovatios-hora) y un estado de enlace textual (`UP` / `DOWN`), mientras que el inversor fotovoltaico entrega un **payload JSON serializado como texto** con claves en mayúsculas, `P` en vatios, `E_TODAY` en vatios-hora y un código de estado numérico.
+
+El patrón resuelve el problema de la forma canónica: se define una **interfaz objetivo (`DeviceGateway`)** que el dominio entiende, se dejan los dispositivos tal como son (**adaptee**) y se escriben **adaptadores** que traducen el idioma de cada fabricante al idioma común. El resultado siempre es el mismo modelo `DeviceTelemetry` (voltios, amperios, kW, kWh, °C).
+
+El beneficio real se ve en el cliente: `DeviceMonitorService` (backend) y `DevicePanel` (frontend) trabajan **exclusivamente contra `DeviceGateway`**. Si mañana se integra un inversor de otra marca, solo se agrega su `Adapter` al registro: **ni el cliente ni el controlador cambian una sola línea**. Además, la opción preferible frente a modificar el legado es **no tocar el código del fabricante**.
+
+**Implementaciones actuales (2):**
+
+- `DeviceGateway` + `DeviceMonitorService` — Backend (PHP)
+- `DeviceGateway` + `DevicePanel` — Frontend (TypeScript)
+
+---
+
+## 13. `DeviceGateway` / `DeviceMonitorService` — Backend
+
+**Archivo:** `backend-laravel/app/Patterns/Adapters/DeviceGateway.php`, `backend-laravel/app/Patterns/Adapters/LegacyScadaMeter.php`, `backend-laravel/app/Patterns/Adapters/PvInverterDevice.php`, `backend-laravel/app/Patterns/Adapters/LegacyScadaAdapter.php`, `backend-laravel/app/Patterns/Adapters/PvInverterAdapter.php`, `backend-laravel/app/Patterns/Adapters/DeviceGatewayRegistry.php`, `backend-laravel/app/Patterns/Adapters/DeviceMonitorService.php` y `backend-laravel/app/Models/DeviceTelemetry.php`
+
+**En qué consiste dentro del proyecto:** `DeviceGateway` es la **interfaz objetivo (Target)**: `getProviderKey()`, `getDeviceId()`, `getDisplayName()`, `isOnline()`, `getSupportedMetrics()` y `readTelemetry()`. Los dispositivos heredados quedan intactos como **adaptee**: `LegacyScadaMeter` expone `readRegister($direccion)` y `dumpRegisters()` con unidades propias, y `PvInverterDevice` expone `poll()` que devuelve el JSON **como texto**.
+
+Cada **Adapter** cumple el contrato y hace la traducción: `LegacyScadaAdapter` convierte `'UP'`/`'DOWN'` a booleano, centiamperios a amperios, decivatios a kW, hectovatios-hora a kWh y decigrados a °C; `PvInverterAdapter` deserializa el JSON, renombra las claves en mayúsculas y convierte vatios a kW, vatios-hora a kWh y decigrados a °C, interpretando `STATUS = 0` como dispositivo sano.
+
+`DeviceGatewayRegistry` es el punto de ensamblaje: es el **único** que conoce a la vez los adaptee y los adaptadores, y entrega gateways ya armados. `DeviceMonitorService` recibe `DeviceGateway[]` por constructor y expone `listDevices()`, `readTelemetry($deviceId)` y `getSummary()`; el consolidado por proveedor (`devicesByProvider`) demuestra que el cliente mezcla marcas sin distinguirlas. Los endpoints `GET /api/energy/devices`, `GET /api/energy/devices/{deviceId}/telemetry` y `GET /api/energy/devices/telemetry/summary` exponen el resultado ya normalizado.
+
+**Diagrama UML:**
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│ «interface»  DeviceGateway   (TARGET)                                    │
+├──────────────────────────────────────────────────────────────────────────┤
+│ + getProviderKey() : string                                              │
+│ + getDeviceId() : string                                                 │
+│ + getDisplayName() : string                                              │
+│ + isOnline() : bool                                                      │
+│ + getSupportedMetrics() : array                                          │
+│ + readTelemetry() : DeviceTelemetry                                      │
+└──────────────────────────────────────────────────────────────────────────┘
+
+                  ▲                                     ▲
+                  │ implementan                         │ implementan
+
+┌────────────────────────────────────┐┌────────────────────────────────────┐
+│ «Adapter» LegacyScadaAdapter       ││ «Adapter» PvInverterAdapter        │
+├────────────────────────────────────┤├────────────────────────────────────┤
+│ - meter : LegacyScadaMeter         ││ - device : PvInverterDevice        │
+│ + readTelemetry() : DeviceTelemetry││ + readTelemetry() : DeviceTelemetry│
+│ + isOnline() : boolean             ││ + isOnline() : boolean             │
+│ + getSupportedMetrics() : array    ││ + getSupportedMetrics() : array    │
+└────────────────────────────────────┘└────────────────────────────────────┘
+
+                  │ envuelve                             │ envuelve
+
+┌────────────────────────────────────┐┌────────────────────────────────────┐
+│ «Adaptee» LegacyScadaMeter         ││ «Adaptee» PvInverterDevice         │
+├────────────────────────────────────┤├────────────────────────────────────┤
+│ + readRegister(int) : int          ││ + poll() : string                  │
+│ + dumpRegisters() : array          ││ -                                  │
+│ 30001 voltios                      ││ payload JSON en TEXTO              │
+│ 30002 centiamperios                ││ P en vatios                        │
+│ 30003 decivatios                   ││ E_TODAY en vatios-hora             │
+│ 30004 hectovatios-hora             ││ TEMP en decigrados                 │
+│ 30005 decigrados                   ││ STATUS: 0 = sano                   │
+│ enlace: 'UP' / 'DOWN'              ││                                    │
+└────────────────────────────────────┘└────────────────────────────────────┘
+
+            └──── los dos Adapter entregan el mismo modelo normalizado ────┘
+
+                  ┌────────────────────────────────────────────────────────┐
+                  │ DeviceTelemetry   (modelo del dominio)                 │
+                  ├────────────────────────────────────────────────────────┤
+                  │ voltios · amperios · kW · kWh · °C                     │
+                  │ + rawReading  (evidencia del origen crudo)             │
+                  └────────────────────────────────────────────────────────┘
+
+                                      ▲
+                                      │ entrega
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│ «Client»  DeviceMonitorService                                           │
+├──────────────────────────────────────────────────────────────────────────┤
+│ + listDevices() : array                                                  │
+│ + readTelemetry(string) : DeviceTelemetry                                │
+│ + getSummary() : array                                                   │
+├──────────────────────────────────────────────────────────────────────────┤
+│ ctor: DeviceGateway[]     ← solo conoce la interfaz                      │
+│ no sabe si el dato vino de un medidor SCADA o de un inversor             │
+└──────────────────────────────────────────────────────────────────────────┘
+
+                                      ▲  recibe los gateways ya armados
+
+                  ┌────────────────────────────────────────────────────────┐
+                  │ DeviceGatewayRegistry  (punto de ensamblaje)           │
+                  ├────────────────────────────────────────────────────────┤
+                  │ + register(DeviceGateway) : void                       │
+                  │ + all() : DeviceGateway[]                              │
+                  │ único módulo que conoce Adaptee + Adapter              │
+                  └────────────────────────────────────────────────────────┘
+
+                                      ▼
+
+                  ┌────────────────────────────────────────────────────────┐
+                  │ EnergyController  (API)                                │
+                  ├────────────────────────────────────────────────────────┤
+                  │ GET  /api/energy/devices                               │
+                  │ GET  /api/energy/devices/{deviceId}/telemetry          │
+                  │ GET  /api/energy/devices/telemetry/summary             │
+                  └────────────────────────────────────────────────────────┘
+```
+**Código clave** — la interfaz objetivo (`DeviceGateway.php`):
+
+```php
+interface DeviceGateway
+{
+    public function getProviderKey(): string;
+    public function getDeviceId(): string;
+    public function getDisplayName(): string;
+    public function isOnline(): bool;
+    public function getSupportedMetrics(): array;
+    public function readTelemetry(): DeviceTelemetry;
+}
+```
+
+**Código clave** — el adaptee que **no** se modifica (`LegacyScadaMeter.php`):
+
+```php
+class LegacyScadaMeter
+{
+    public const REG_VOLTAGE = 30001;    // voltios
+    public const REG_CURRENT = 30002;    // centiamperios
+    public const REG_POWER = 30003;     // decivatios (0.1 W)
+    public const REG_ENERGY = 30004;     // hectovatios-hora (0.01 kWh)
+    public const REG_TEMPERATURE = 30005; // decigrados Celsius
+
+    public function readRegister(int $address): int
+    {
+        return $this->registers[$address] ?? 0;
+    }
+
+    public function getLinkState(): string   // 'UP' o 'DOWN'
+    {
+        return $this->linkState;
+    }
+}
+```
+
+**Código clave** — el adaptador que traduce (`LegacyScadaAdapter.php`):
+
+```php
+class LegacyScadaAdapter implements DeviceGateway
+{
+    public function __construct(private LegacyScadaMeter $meter) {}
+
+    public function isOnline(): bool
+    {
+        // 'UP' / 'DOWN'  ->  booleano del dominio
+        return $this->meter->getLinkState() === 'UP';
+    }
+
+    public function readTelemetry(): DeviceTelemetry
+    {
+        $telemetry = new DeviceTelemetry();
+        $telemetry->deviceId = $this->getDeviceId();
+        $telemetry->deviceType = 'smart-meter';
+        $telemetry->online = $this->isOnline();
+
+        // Traduccion de unidades heredadas a unidades del dominio
+        $telemetry->current = $this->meter->readRegister(LegacyScadaMeter::REG_CURRENT) / 100;      // -> A
+        $telemetry->powerKw = ($this->meter->readRegister(LegacyScadaMeter::REG_POWER) / 10) / 1000; // -> kW
+        $telemetry->energyKwh = $this->meter->readRegister(LegacyScadaMeter::REG_ENERGY) / 100;       // -> kWh
+        $telemetry->temperatureC = $this->meter->readRegister(LegacyScadaMeter::REG_TEMPERATURE) / 10; // -> C
+
+        $telemetry->rawReading = 'registros SCADA 30001-30005 (...) - enlace ' . $this->meter->getLinkState();
+
+        return $telemetry;
+    }
+}
+```
+
+**Código clave** — el segundo adaptador, con otro idioma (`PvInverterAdapter.php`):
+
+```php
+class PvInverterAdapter implements DeviceGateway
+{
+    public function __construct(private PvInverterDevice $device) {}
+
+    public function readTelemetry(): DeviceTelemetry
+    {
+        $payload = json_decode($this->device->poll(), true); // texto -> array
+
+        $telemetry = new DeviceTelemetry();
+        $telemetry->online = (int) ($payload['STATUS'] ?? 1) === 0;   // 0 = sano
+        $telemetry->powerKw = (float) ($payload['P'] ?? 0) / 1000;     // W -> kW
+        $telemetry->energyKwh = (float) ($payload['E_TODAY'] ?? 0) / 1000; // Wh -> kWh
+        $telemetry->temperatureC = (float) ($payload['TEMP'] ?? 0) / 10;   // decigrados -> C
+
+        return $telemetry;
+    }
+}
+```
+
+**Código clave** — el ensamblaje y el cliente (`DeviceGatewayRegistry.php` y `DeviceMonitorService.php`):
+
+```php
+class DeviceGatewayRegistry
+{
+    public function __construct()
+    {
+        foreach (LegacyScadaMeter::createSampleFleet() as $meter) {
+            $this->register(new LegacyScadaAdapter($meter));   // un Adapter por dispositivo
+        }
+        foreach (PvInverterDevice::createSampleFleet() as $device) {
+            $this->register(new PvInverterAdapter($device));
+        }
+    }
+}
+
+class DeviceMonitorService
+{
+    // El cliente recibe interfaces, jamas clases concretas:
+    public function __construct(private array $gateways) {}   // DeviceGateway[]
+
+    public function getSummary(): array
+    {
+        foreach ($this->gateways as $gateway) {
+            $telemetry = $gateway->readTelemetry();  // no sabe si es SCADA o inversor
+            // ...
+        }
+    }
+}
+```
+
+**Endpoints del patrón Adapter:**
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| GET | `/api/energy/devices` | Inventario IoT normalizado (el cliente solo ve `DeviceGateway`) |
+| GET | `/api/energy/devices/{deviceId}/telemetry` | Telemetría de un dispositivo ya traducida a `DeviceTelemetry` |
+| GET | `/api/energy/devices/telemetry/summary` | Consolidado de la red: dispositivos en línea, kW totales y reparto por fabricante |
+| GET | `/api/energy/legacy/meters` | Datos **crudos** del adaptee SCADA (registros 30001-30005) |
+| GET | `/api/energy/legacy/inverters` | Datos **crudos** del adaptee inversor (payload JSON en texto) |
+
+Los dos últimos endpoints exponen el "antes" de la adaptación: son los que consumen los adaptadores del frontend para demostrar que ambos lados producen el mismo modelo normalizado.
+
+---
+
+## 14. `DeviceGateway` / `DevicePanel` — Frontend
+
+**Archivo:** `frontend/src/patterns/adapter/DeviceGateway.ts`, `frontend/src/patterns/adapter/LegacyScadaClient.ts`, `frontend/src/patterns/adapter/PvInverterClient.ts`, `frontend/src/patterns/adapter/ScadaGatewayAdapter.ts`, `frontend/src/patterns/adapter/InverterGatewayAdapter.ts`, `frontend/src/patterns/adapter/deviceGatewayRegistry.ts` y `frontend/src/components/DevicePanel.tsx`
+
+**En qué consiste dentro del proyecto:** La estructura es la misma que en el backend, pero en el **navegador**. `DeviceGateway.ts` declara la interfaz objetivo (`getProviderKey`, `getDeviceId`, `getDisplayName`, `isOnline`, `getSupportedMetrics`, `readTelemetry`) junto con el tipo `DeviceTelemetry` que devuelve. Los **adaptee** son los clientes HTTP de cada sistema legado: `LegacyScadaClient` pide `/energy/legacy/meters` y recibe registros crudos, y `PvInverterClient` pide `/energy/legacy/inverters` y recibe el JSON como texto. Ninguno de los dos pasa por `EnergyApiService`, precisamente porque su respuesta **no** tiene el formato que la aplicación espera.
+
+`ScadaGatewayAdapter` e `InverterGatewayAdapter` cumplen el contrato traduciendo unidades y estados, y `deviceGatewayRegistry` decide qué adaptador corresponde a cada dispositivo: es el único módulo que conoce los sistemas legados. `DevicePanel` es el **cliente**: pide los gateways al registro, llama `readTelemetry()` y renderiza las métricas sin saber quién fabricó el dato. El panel permite alternar entre el **adaptador del navegador** (estos) y el **adaptador del backend** (los de PHP) para comprobar que ambos entregan la misma telemetría normalizada.
+
+**Diagrama UML:**
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│ DeviceGateway   (TARGET, interface TypeScript)                           │
+├──────────────────────────────────────────────────────────────────────────┤
+│ + getProviderKey() : string                                              │
+│ + getDeviceId() : string                                                 │
+│ + getDisplayName() : string                                              │
+│ + isOnline() : Promise<boolean>                                          │
+│ + getSupportedMetrics() : Record<string, string>                         │
+│ + readTelemetry() : Promise<DeviceTelemetry>                             │
+└──────────────────────────────────────────────────────────────────────────┘
+
+                  ▲                                     ▲
+                  │ implementan                         │ implementan
+
+┌────────────────────────────────────┐┌────────────────────────────────────┐
+│ «Adapter» ScadaGatewayAdapter      ││ «Adapter» InverterGatewayAdapter   │
+├────────────────────────────────────┤├────────────────────────────────────┤
+│ - client : LegacyScadaClient       ││ - client : PvInverterClient        │
+│ - serial : string                  ││ - serial : string                  │
+│ + readTelemetry() : Promise        ││ + readTelemetry() : Promise        │
+└────────────────────────────────────┘└────────────────────────────────────┘
+
+                  │ envuelve                             │ envuelve
+
+┌────────────────────────────────────┐┌────────────────────────────────────┐
+│ «Adaptee» LegacyScadaClient        ││ «Adaptee» PvInverterClient         │
+├────────────────────────────────────┤├────────────────────────────────────┤
+│ + fetchRegisterDumps() : Promise   ││ + fetchPollPayloads() : Promise    │
+│ -                                  ││ -                                  │
+│ GET /energy/legacy/meters          ││ GET /energy/legacy/inverters       │
+│ registros 30001..30005 crudos      ││ payload JSON como texto            │
+│ enlace: 'UP' / 'DOWN'              ││ P en W · TEMP en decigrados        │
+└────────────────────────────────────┘└────────────────────────────────────┘
+
+            └──── se traducen a voltios · amperios · kW · kWh · °C ────┘
+
+              ┌────────────────────────────────────────────────────────────┐
+              │ DeviceGatewayRegistry   (punto de ensamblaje)              │
+              ├────────────────────────────────────────────────────────────┤
+              │ + gateways() : Promise<DeviceGateway[]>                    │
+              │ + build() : Promise<DeviceGateway[]>                       │
+              │ un Adapter por cada dispositivo descubierto                │
+              └────────────────────────────────────────────────────────────┘
+
+                                      ▼  devuelve DeviceGateway[]
+
+              ┌────────────────────────────────────────────────────────────┐
+              │ «Client»  DevicePanel   (React)                            │
+              ├────────────────────────────────────────────────────────────┤
+              │ + gateway.readTelemetry() : Promise<DeviceTelemetry>       │
+              │ -                                                          │
+              │ renderiza las métricas normalizadas                        │
+              │ y el origen crudo (rawReading) de cada una                 │
+              └────────────────────────────────────────────────────────────┘
+
+                                      ▲
+                                      │
+
+                                      ▼
+
+              ┌────────────────────────────────────────────────────────────┐
+              │ Alternativa seleccionable en el panel                      │
+              ├────────────────────────────────────────────────────────────┤
+              │ GET /api/energy/devices                                    │
+              │ GET /api/energy/devices/{deviceId}/telemetry               │
+              │ (Adapter del backend en PHP: mismo resultado)              │
+              └────────────────────────────────────────────────────────────┘
+```
+**Código clave** — la interfaz objetivo (`DeviceGateway.ts`):
+
+```typescript
+export interface DeviceGateway {
+  getProviderKey(): string;
+  getDeviceId(): string;
+  getDisplayName(): string;
+  isOnline(): Promise<boolean>;
+  getSupportedMetrics(): Record<string, string>;
+  readTelemetry(): Promise<DeviceTelemetry>;
+}
+```
+
+**Código clave** — el adaptador que traduce registros SCADA (`ScadaGatewayAdapter.ts`):
+
+```typescript
+const REG = { voltage: 30001, current: 30002, power: 30003, energy: 30004, temperature: 30005 } as const;
+
+export class ScadaGatewayAdapter implements DeviceGateway {
+  constructor(private client: LegacyScadaClient, private serial: string) {}
+
+  getProviderKey(): string { return 'legacy-scada'; }
+  getDeviceId(): string { return `scada-${this.serial.toLowerCase()}`; }
+
+  async readTelemetry(): Promise<DeviceTelemetry> {
+    const dump = await this.dump();
+    const read = (address: number): number => Number(dump.registers[String(address)] ?? 0);
+
+    // centiamperios -> A · decivatios -> kW · hectovatios-hora -> kWh · decigrados -> C
+    const current = read(REG.current) / 100;
+    const powerKw = read(REG.power) / 10 / 1000;
+    const energyKwh = read(REG.energy) / 100;
+    const temperatureC = read(REG.temperature) / 10;
+
+    return {
+      deviceId: this.getDeviceId(),
+      provider: this.getProviderKey(),
+      online: dump.linkState === 'UP',        // 'UP' / 'DOWN' -> booleano
+      voltage: read(REG.voltage),
+      current, powerKw, energyKwh, temperatureC,
+      rawReading: `registros SCADA ${REG.voltage}-${REG.temperature} (...) - enlace ${dump.linkState}`,
+      metrics: { /* label, value, unit ya normalizados */ },
+    };
+  }
+}
+```
+
+**Código clave** — el registro que decide qué adaptador usar (`deviceGatewayRegistry.ts`):
+
+```typescript
+class DeviceGatewayRegistry {
+  private cache: DeviceGateway[] | null = null;
+
+  private async build(): Promise<DeviceGateway[]> {
+    const scada = new LegacyScadaClient();
+    const inverter = new PvInverterClient();
+
+    const [meters, inverters] = await Promise.all([
+      scada.fetchRegisterDumps(),
+      inverter.fetchPollPayloads(),
+    ]);
+
+    return [
+      ...meters.map((m) => new ScadaGatewayAdapter(scada, m.serial)),
+      ...inverters.map((d) => new InverterGatewayAdapter(inverter, d.serial)),
+    ];
+  }
+}
+
+const registry = new DeviceGatewayRegistry();
+export default registry;
+```
+
+**Uso ligado al sistema en `DevicePanel` (React):**
+
+```tsx
+// El componente es el CLIENTE: solo conoce la interfaz DeviceGateway.
+const gateways: DeviceGateway[] = await deviceGatewayRegistry.gateways();
+const telemetry = await Promise.all(gateways.map((gateway) => gateway.readTelemetry()));
+
+// Cada fila muestra el valor normalizado y, debajo, de donde vino:
+//   scada-itm-4417  | 0.171 kW | 1284.5 kWh
+//   origen crudo: registros SCADA 30001-30005 (...) - enlace UP
+//   inverter-inv-77021 | 1.85 kW | 4.21 kWh
+//   origen crudo: payload JSON del polling (GRID_CONNECTED) ... STATUS 0
+
+// El selector "Origen de la telemetria" alterna entre estos adaptadores
+// (navegador) y los del backend (/api/energy/devices/...), verificando
+// que ambos lados entregan el mismo modelo normalizado.
+```
+
+---
+
+# Patrón Bridge
+
+## ¿Qué es dentro del proyecto?
+
+El **Bridge** se usa en las **liquidaciones de energía** para separar dos dimensiones que hoy están mezcladas: **qué reglas de negocio aplican** (perfil del cliente) y **en qué moneda se cobra**. Sin el patrón, cada combinación de perfil y moneda exigiría una clase nueva (`FacturaResidencialCOP`, `FacturaResidencialUSD`, `FacturaComercialCOP`…), es decir, el **producto cartesiano** de ambas dimensiones.
+
+La solución es separar las dos jerarquías: la **abstracción** (`EnergyBill` y sus refinamientos `ResidentialBill` / `CommercialBill`) define el flujo de liquidación y **contiene** una referencia al **implementor** (`CurrencyBridge`); el implementor y sus implementaciones concretas (`CopCurrency`, `UsdCurrency`, `EurCurrency`) definen únicamente la moneda: formato, decimales, impuesto y conversión. Ninguna de las dos jerarquías conoce a la otra: no hay herencia entre `EnergyBill` y `CurrencyBridge`.
+
+El resultado es que **ambos ejes varían de forma independiente**: se pueden agregar perfiles (industrial, comunitario) o monedas (GBP, JPY) sin tocar la jerarquía contraria. `SettlementService` es el **cliente**: se limita a componer una abstracción refinada con un implementor concreto y a exponer la matriz de combinaciones (`GET /api/energy/settlements/matrix`), que hoy es de **2 perfiles × 3 monedas = 6** liquidatedores, repartidos en 8 clases.
+
+**Implementaciones actuales (2):**
+
+- `EnergyBill` + `CurrencyBridge` — Backend (PHP)
+- `EnergyBill` + `CurrencyBridge` — Frontend (TypeScript)
+
+---
+
+## 15. `EnergyBill` / `CurrencyBridge` — Backend
+
+**Archivo:** `backend-laravel/app/Patterns/Bridges/EnergyBill.php`, `backend-laravel/app/Patterns/Bridges/ResidentialBill.php`, `backend-laravel/app/Patterns/Bridges/CommercialBill.php`, `backend-laravel/app/Patterns/Bridges/CurrencyBridge.php`, `backend-laravel/app/Patterns/Bridges/CopCurrency.php`, `backend-laravel/app/Patterns/Bridges/UsdCurrency.php`, `backend-laravel/app/Patterns/Bridges/EurCurrency.php` y `backend-laravel/app/Patterns/Bridges/SettlementService.php`
+
+**En qué consiste dentro del proyecto:** `CurrencyBridge` es el **implementor**: declara `getCode()`, `getSymbol()`, `getLabel()`, `getDecimals()`, `getTaxRate()`, `getUsdRate()`, `convertFromUsd()`, `convertToMinorUnits()` y `format()`. No sabe nada de facturas. Sus tres implementaciones concretas aplican el formato local (COP sin decimales con punto de miles, USD con coma de miles, EUR con el símbolo al final) y su impuesto (19 %, 10 % y 21 %).
+
+`EnergyBill` es la **abstracción**: recibe un `CurrencyBridge` por constructor y define el flujo común de liquidación en `build()` — subtotal, ajustes del perfil, base imponible, impuesto y total — apoyándose **solo en la interfaz** del implementor (`format()`, `convertToMinorUnits()`, `getTaxRate()`). Los refinamientos aportan las reglas de su perfil: `ResidentialBill` aplica el subsidio del 5 % y `CommercialBill` el recargo del 2 % más una tarifa fija de **US$ 25 convertida con el implementor** (`convertFromUsd`), que por eso vale $ 97.500 COP, US$ 25 o 23 € según la moneda.
+
+`SettlementService` (cliente) compone ambas jerarquías: resuelve la moneda, instancia la refinación de la abstracción y devuelve la liquidación. Además expone `getMatrix()` con perfiles, monedas y combinaciones, y `getProfiles()` / `getCurrencies()` para poblar la interfaz. Los endpoints `GET /api/energy/settlements/matrix` y `POST /api/energy/settlements/quote` exponen el patrón.
+
+**Diagrama UML:**
+
+```
+┌────────────────────────────────┐      ┌────────────────────────────────────┐
+│ ABSTRACCION                    │      │ IMPLEMENTOR                        │
+├────────────────────────────────┤      ├────────────────────────────────────┤
+│ «abstract» EnergyBill          │      │ «interface» CurrencyBridge         │
+│ - currency : CurrencyBridge    │◄─────┤ + getCode() : string             │
+│ + build(array) : array         │      │ + getSymbol() : string             │
+│ + getProfileKey() : string     │─────►│ + getDecimals() : int            │
+│ + applyProfileRules() : array  │      │ + getTaxRate() : float             │
+└────────────────────────────────┘      │ + getUsdRate() : float             │
+                                        │ + convertFromUsd(f) : float        │
+                                        │ + convertToMinorUnits(f) : int     │
+                                        │ + format(f) : string               │
+                                        └────────────────────────────────────┘
+
+                                   (contiene un CurrencyBridge; usa solo su interfaz, nunca la clase)
+
+               ▲                               ▼
+  hereda                      hereda                         ▼            ▼            ▼
+
+┌──────────────────────────────┐┌──────────────────────────────┐  ┌──────────────────────┐┌──────────────────────┐
+│ ResidentialBill              ││ CommercialBill               │  │ CopCurrency          ││ UsdCurrency          │
+├──────────────────────────────┤├──────────────────────────────┤  │ IVA 19%              ││ IVA 10%              │
+│ subsidia el 5% del subtotal  ││ +2% y tarifa fija US$ 25     │  │ 0 decimales          ││ 2 decimales          │
+└──────────────────────────────┘└──────────────────────────────┘  └──────────────────────┘└──────────────────────┘
+
+      EnergyBill  -X->  CurrencyBridge      (la abstracción usa la interfaz, no la clase)
+      CurrencyBridge  -X->  EnergyBill      (el implementor no sabe qué factura se cobra)
+
+                                                        ┌────────────────────────────────────────────────────────┐
+                                                        │ «Client»  SettlementService                            │
+                                                        ├────────────────────────────────────────────────────────┤
+                                                        │ + quote(profile, currency, array) : array              │
+                                                        │ + getMatrix() : array                                  │
+                                                        │ + getProfiles() : array                                │
+                                                        │ + getCurrencies() : array                              │
+                                                        ├────────────────────────────────────────────────────────┤
+                                                        │ new ResidentialBill(new CopCurrency())                 │
+                                                        │ ← composición: sin herencia entre las dos jerarquías   │
+                                                        └────────────────────────────────────────────────────────┘
+
+                                                         │
+
+                                                         ▼
+
+                                                  ┌──────────────────────────────────────────────────────────────┐
+                                                  │ 2 perfiles × 3 monedas = 6 combinaciones                     │
+                                                  ├──────────────────────────────────────────────────────────────┤
+                                                  │ residential + COP / USD / EUR     (subsidio 5%)              │
+                                                  │ commercial  + COP / USD / EUR     (recargo 2% + US$ 25)      │
+                                                  ├──────────────────────────────────────────────────────────────┤
+                                                  │ Agregar un perfil NO obliga a tocar la moneda                │
+                                                  │ Agregar una moneda NO obliga a tocar el perfil               │
+                                                  └──────────────────────────────────────────────────────────────┘
+
+                                GET  /api/energy/settlements/matrix
+                                POST /api/energy/settlements/quote
+```
+**Código clave** — el implementor (`CurrencyBridge.php`):
+
+```php
+interface CurrencyBridge
+{
+    public function getCode(): string;
+    public function getSymbol(): string;
+    public function getDecimals(): int;
+    public function getTaxRate(): float;
+    public function getUsdRate(): float;
+    public function convertFromUsd(float $usdAmount): float;
+    public function convertToMinorUnits(float $amount): int;
+    public function format(float $amount): string;
+}
+```
+
+**Código clave** — un implementor concreto (`CopCurrency.php`):
+
+```php
+class CopCurrency implements CurrencyBridge
+{
+    private const USD_RATE = 3900.0;  // 1 USD = 3.900 COP
+    private const TAX_RATE = 0.19;    // IVA Colombia
+
+    public function getDecimals(): int { return 0; }
+    public function getTaxRate(): float { return self::TAX_RATE; }
+
+    public function convertFromUsd(float $usdAmount): float
+    {
+        return $usdAmount * self::USD_RATE;
+    }
+
+    public function format(float $amount): string
+    {
+        return '$ ' . number_format($amount, 0, ',', '.') . ' COP';
+    }
+}
+```
+
+**Código clave** — la abstracción: el flujo común, sin conocer ninguna moneda (`EnergyBill.php`):
+
+```php
+abstract class EnergyBill
+{
+    public function __construct(protected CurrencyBridge $currency) {}
+
+    abstract protected function applyProfileRules(float $subtotal, array $data): array;
+
+    public function build(array $data): array
+    {
+        $subtotal = $data['kwh'] * $data['pricePerKwh'];
+        $adjustments = $this->applyProfileRules($subtotal, $data);  // regla del perfil
+        $base = $subtotal + array_sum(array_column($adjustments, 'amount'));
+
+        // Todo lo monetario viene del IMPLEMENTOR, no de una clase concreta:
+        $tax = $base * $this->currency->getTaxRate();
+        $total = $base + $tax;
+
+        return [
+            'profile' => $this->getProfileKey(),
+            'currency' => $this->currency->getCode(),
+            'adjustments' => $adjustments,
+            'total' => round($total, 2),
+            'totalFormatted' => $this->currency->format($total),
+            'totalMinorUnits' => $this->currency->convertToMinorUnits($total),
+        ];
+    }
+}
+```
+
+**Código clave** — refinamientos que usan el implementor en sus propias reglas:
+
+```php
+class ResidentialBill extends EnergyBill
+{
+    private const SUBSIDY_RATE = 0.05;
+
+    protected function applyProfileRules(float $subtotal, array $data): array
+    {
+        // Porcentaje: independiente de la moneda
+        return [['label' => 'Subsidio residencial (5%)', 'amount' => -round($subtotal * self::SUBSIDY_RATE, 2)]];
+    }
+}
+
+class CommercialBill extends EnergyBill
+{
+    private const SURCHARGE_RATE = 0.02;
+    private const FLAT_FEE_USD = 25.0;
+
+    protected function applyProfileRules(float $subtotal, array $data): array
+    {
+        return [
+            ['label' => 'Recargo comercial (2%)', 'amount' => round($subtotal * self::SURCHARGE_RATE, 2)],
+            // La tarifa fija se convierte con el IMPLEMENTOR:
+            ['label' => 'Tarifa de servicio comercial (US$ 25)',
+             'amount' => round($this->currency->convertFromUsd(self::FLAT_FEE_USD), 2)],
+        ];
+    }
+}
+```
+
+**Código clave** — el cliente que compone ambas jerarquías (`SettlementService.php`):
+
+```php
+/** @var array<string, class-string<EnergyBill>> */
+private array $profiles;   // ['residential' => ResidentialBill::class, 'commercial' => CommercialBill::class]
+
+public function quote(string $profile, string $currencyCode, array $data): array
+{
+    $bill = $this->createBill($profile, $this->resolveCurrency($currencyCode));
+    return $bill->build($data);
+}
+
+private function createBill(string $profile, CurrencyBridge $currency): EnergyBill
+{
+    // Instanciacion tipica del cliente en Bridge: refinacion + implementor,
+    // sin herencia entre ambas jerarquias.
+    $class = $this->profiles[$profile] ?? null;
+
+    if ($class === null) {
+        throw new \InvalidArgumentException('Perfil de liquidacion desconocido: ' . $profile);
+    }
+
+    return new $class($currency);
+}
+```
+
+**Prueba de la variación independiente** (`2 × 3` combinaciones sin condicionales anidados):
+
+| Perfil \ Moneda | COP (19 %) | USD (10 %) | EUR (21 %) |
+|-----------------|-----------|------------|------------|
+| `residential` (subsidio 5 %) | `$ 28.263 COP` | `US$ 522.50 USD` | `574,75 €` |
+| `commercial` (recargo 2 % + US$ 25) | `$ 146.370 COP` | `US$ 588.50 USD` | `644,93 €` |
+
+*Valores para 50 kWh a 500 COP/kWh (residencial) y 50 kWh a 10 USD/kWh (comercial). La tarifa fija de US$ 25 se convierte sola: 97.500 COP, 25 USD y 23 €.*
+
+**Endpoints del patrón Bridge:**
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| GET | `/api/energy/settlements/matrix` | Perfiles, monedas y combinaciones soportadas (producto cartesiano) |
+| POST | `/api/energy/settlements/quote` | Emite la liquidación: une `EnergyBill` + `CurrencyBridge` y devuelve el total formateado |
+
+---
+
+## 16. `EnergyBill` / `CurrencyBridge` — Frontend
+
+**Archivo:** `frontend/src/patterns/bridge/EnergyBill.ts`, `frontend/src/patterns/bridge/ResidentialBill.ts`, `frontend/src/patterns/bridge/CommercialBill.ts`, `frontend/src/patterns/bridge/CurrencyBridge.ts`, `frontend/src/patterns/bridge/CopCurrency.ts`, `frontend/src/patterns/bridge/UsdCurrency.ts`, `frontend/src/patterns/bridge/EurCurrency.ts`, `frontend/src/patterns/bridge/SettlementService.ts` y `frontend/src/components/SettlementPanel.tsx`
+
+**En qué consiste dentro del proyecto:** La misma estructura del Bridge en TypeScript. `CurrencyBridge.ts` declara el implementor (`code`, `symbol`, `label`, `decimals`, `taxRate`, `usdRate`, `convertFromUsd`, `convertToMinorUnits`, `format`); `CopCurrency`, `UsdCurrency` y `EurCurrency` lo implementan con `Intl.NumberFormat` para el formato local. `EnergyBill.ts` es la abstracción: recibe el implementor en el constructor y define el flujo `build()` reutilizando la interfaz; `ResidentialBill` y `CommercialBill` aportan las reglas de su perfil.
+
+`SettlementService.ts` es el cliente: compone ambas jerarquías y permite calcular **localmente** cualquier combinación sin llamar al servidor. `SettlementPanel` mueve los dos ejes con dos selectores independientes (perfil y moneda), muestra la liquidación calculada en el navegador y, al pulsar **Emitir liquidación en el backend**, solicita la misma operación al Bridge de PHP: si los totales coinciden, el panel confirma que ambas implementaciones del patrón producen el mismo resultado.
+
+**Diagrama UML:**
+
+```
+┌────────────────────────────────┐      ┌────────────────────────────────────┐
+│ ABSTRACCION                    │      │ IMPLEMENTOR                        │
+├────────────────────────────────┤      ├────────────────────────────────────┤
+│ «abstract» EnergyBill          │      │ «interface» CurrencyBridge         │
+│ - currency : CurrencyBridge    │◄─────┤ + code / symbol / label          │
+│ + build(input) : BillResult    │      │ + decimals / taxRate / usdRate     │
+│ + getProfileKey() : string     │─────►│ + decimals / taxRate / usdRate    │
+│ + applyProfileRules() : Rule[] │      │ + convertToMinorUnits(f) : number  │
+└────────────────────────────────┘      │ + format(f) : string               │
+                                        └────────────────────────────────────┘
+
+                                   (contiene un CurrencyBridge; usa solo su interfaz, nunca la clase)
+
+               ▲                               ▼
+  hereda                      hereda                         ▼            ▼            ▼
+
+┌──────────────────────────────┐┌──────────────────────────────┐  ┌──────────────────────┐┌──────────────────────┐
+│ ResidentialBill              ││ CommercialBill               │  │ CopCurrency          ││ UsdCurrency          │
+├──────────────────────────────┤├──────────────────────────────┤  │ IVA 19%              ││ IVA 10%              │
+│ subsidia el 5% del subtotal  ││ +2% y tarifa fija US$ 25     │  └──────────────────────┘└──────────────────────┘
+└──────────────────────────────┘└──────────────────────────────┘
+
+      EnergyBill  -X->  CurrencyBridge      (la abstracción usa la interfaz, no la clase)
+      CurrencyBridge  -X->  EnergyBill      (el implementor no sabe qué factura se cobra)
+
+                                              ┌──────────────────────────────────────────────────────────────────┐
+                                              │ «Client»  SettlementService   (TypeScript)                       │
+                                              ├──────────────────────────────────────────────────────────────────┤
+                                              │ + quote(profile, currency, input) : BillResult                   │
+                                              │ + getProfiles() : ProfileInfo[]   → los 2 selectores             │
+                                              │ + getCurrencies() : CurrencyInfo[]                               │
+                                              ├──────────────────────────────────────────────────────────────────┤
+                                              │ new CommercialBill(new UsdCurrency())                            │
+                                              │ ← permite calcular CUALQUIER combinación sin backend             │
+                                              └──────────────────────────────────────────────────────────────────┘
+
+                                                        │
+
+                                                        ▼
+
+                                              ┌──────────────────────────────────────────────────────────────────┐
+                                              │ SettlementPanel   (React)                                        │
+                                              ├──────────────────────────────────────────────────────────────────┤
+                                              │ [ selector PERFIL  ·  selector MONEDA ]                          │
+                                              │ liquidacion calculada en el navegador con el Bridge              │
+                                              │ -                                                                │
+                                              │ POST /api/energy/settlements/quote                               │
+                                              │ el Bridge de PHP devuelve el MISMO total                         │
+                                              └──────────────────────────────────────────────────────────────────┘
+```
+**Código clave** — la abstracción con el flujo común (`EnergyBill.ts`):
+
+```typescript
+export abstract class EnergyBill {
+  constructor(protected currency: CurrencyBridge) {}
+
+  abstract getProfileKey(): string;
+  abstract applyProfileRules(subtotal: number): BillAdjustment[];
+
+  build(input: BillInput): EnergyBillResult {
+    const subtotal = input.kwh * input.pricePerKwh;
+    const adjustments = this.applyProfileRules(subtotal);
+    const base = subtotal + adjustments.reduce((acc, a) => acc + a.amount, 0);
+
+    // Todo lo monetario viene del IMPLEMENTOR:
+    const tax = base * this.currency.taxRate;
+    const total = base + tax;
+
+    return {
+      currency: this.currency.code,
+      total: round(total, 2),
+      totalFormatted: this.currency.format(total),
+      totalMinorUnits: this.currency.convertToMinorUnits(total),
+      // ...
+    };
+  }
+}
+```
+
+**Código clave** — refinamiento que convierte con el implementor (`CommercialBill.ts`):
+
+```typescript
+const SURCHARGE_RATE = 0.02;
+const FLAT_FEE_USD = 25.0;
+
+export class CommercialBill extends EnergyBill {
+  applyProfileRules(subtotal: number): BillAdjustment[] {
+    const flatFee = round(this.currency.convertFromUsd(FLAT_FEE_USD), 2);  // 97.500 COP | 25 USD | 23 EUR
+    return [
+      { label: `Recargo comercial (${SURCHARGE_RATE * 100}%)`, amount: round(subtotal * SURCHARGE_RATE, 2), amountFormatted: this.currency.format(subtotal * SURCHARGE_RATE) },
+      { label: `Tarifa de servicio comercial (US$ ${FLAT_FEE_USD})`, amount: flatFee, amountFormatted: this.currency.format(flatFee) },
+    ];
+  }
+}
+```
+
+**Uso ligado al sistema en `SettlementPanel` (React):**
+
+```tsx
+// Los dos ejes del Bridge se mueven por separado: cambiar la moneda no
+// cambia las reglas del perfil, y viceversa.
+<select value={profile} onChange={(e) => setProfile(e.target.value)}>   // abstraccion
+  {profiles.map((p) => <option key={p.key} value={p.key}>{p.name}</option>)}
+</select>
+<select value={currency} onChange={(e) => setCurrency(e.target.value)}> // implementor
+  {currencies.map((c) => <option key={c.code} value={c.code}>{c.code} - {c.label} (IVA {...})</option>)}
+</select>
+
+// Bridge en el FRONTEND (TypeScript)
+const localBill = settlementService.quote(profile, currency, { kwh, pricePerKwh });
+
+// Bridge en el BACKEND (PHP): se valida que ambas capas coinciden
+const backendBill = await api.quoteSettlement({ profile, currency, kwh, pricePerKwh });
+const sameTotal = Math.abs(localBill.total - backendBill.total) < 0.01;
+```
+
+---
+
 # Guía de Ejecución
 
 ## Backend (Laravel)
@@ -2621,6 +3410,13 @@ El frontend corre en `http://localhost:5173`.
 | GET | `/api/energy/source-catalog` | Ver catálogo de fuentes de energía (Factory Method) |
 | GET | `/api/energy/prototype-templates` | Ver las plantillas de oferta (Prototype — `PrototypeRegistry`) |
 | GET | `/api/energy/predictions` | Ver predicciones de producción/consumo (Abstract Method) ligadas al estado real del mercado. Acepta `?production=&consumption=` |
+| GET | `/api/energy/legacy/meters` | Ver los registros crudos del medidor SCADA legado (Adapter — datos sin adaptar) |
+| GET | `/api/energy/legacy/inverters` | Ver los payloads crudos del inversor fotovoltaico (Adapter — JSON en texto) |
+| GET | `/api/energy/devices` | Ver el inventario IoT ya normalizado a `DeviceGateway` (Adapter) |
+| GET | `/api/energy/devices/{deviceId}/telemetry` | Ver la telemetría de un dispositivo traducida a `DeviceTelemetry` (Adapter) |
+| GET | `/api/energy/devices/telemetry/summary` | Ver el consolidado de la red IoT: en línea, kW totales y reparto por fabricante (Adapter) |
+| GET | `/api/energy/settlements/matrix` | Ver la matriz de liquidaciones: perfiles × monedas (Bridge) |
+| POST | `/api/energy/settlements/quote` | Emitir una liquidación uniendo `EnergyBill` + `CurrencyBridge` (Bridge) |
 
 ## Ejemplo de Request
 
@@ -2671,6 +3467,42 @@ curl http://localhost:8000/api/energy/predictions
 
 # Con datos reales del usuario (production y consumption en kWh):
 curl "http://localhost:8000/api/energy/predictions?production=30&consumption=50"
+
+# Ver los datos CRUDOS del medidor SCADA (Adapter — el "antes" de adaptar)
+curl http://localhost:8000/api/energy/legacy/meters
+
+# Ver los datos CRUDOS del inversor fotovoltaico (Adapter — payload JSON en texto)
+curl http://localhost:8000/api/energy/legacy/inverters
+
+# Ver el inventario IoT ya normalizado (Adapter — el cliente solo ve DeviceGateway)
+curl http://localhost:8000/api/energy/devices
+
+# Ver la telemetría de un dispositivo ya traducida (Adapter)
+curl http://localhost:8000/api/energy/devices/scada-itm-4417/telemetry
+
+# Ver la telemetría del inversor (mismo modelo, otro fabricante)
+curl http://localhost:8000/api/energy/devices/inverter-inv-77021/telemetry
+
+# Consolidado de la red IoT (Adapter)
+curl http://localhost:8000/api/energy/devices/telemetry/summary
+
+# Matriz de liquidaciones: 2 perfiles x 3 monedas (Bridge)
+curl http://localhost:8000/api/energy/settlements/matrix
+
+# Emitir liquidación residencial en COP (Bridge — EnergyBill + CopCurrency)
+curl -X POST http://localhost:8000/api/energy/settlements/quote \
+  -H "Content-Type: application/json" \
+  -d '{"profile": "residential", "currency": "COP", "kwh": 50, "pricePerKwh": 500}'
+
+# La MISMA factura residencial, solo cambia el implementor (Bridge)
+curl -X POST http://localhost:8000/api/energy/settlements/quote \
+  -H "Content-Type: application/json" \
+  -d '{"profile": "residential", "currency": "USD", "kwh": 50, "pricePerKwh": 10}'
+
+# Perfil comercial en EUR: el recargo y la tarifa fija de US$ 25 se adaptan solos
+curl -X POST http://localhost:8000/api/energy/settlements/quote \
+  -H "Content-Type: application/json" \
+  -d '{"profile": "commercial", "currency": "EUR", "kwh": 50, "pricePerKwh": 10}'
 ```
 
 ## Patrones de diseño implementados
@@ -2684,5 +3516,7 @@ Hasta el momento se han implementado y documentado en este README los siguientes
 | 3 | **Abstract Method / Template Method** | `AbstractPredictor` + `DailyPredictor`/`WeeklyPredictor` (PHP), `Predictor` + variantes (TS) |
 | 4 | **Builder** | `EnergyOfferBuilder` + `OfferDirector` (PHP y TS) |
 | 5 | **Prototype** | `Prototype`, `OfferPrototype`, `PrototypeRegistry` (PHP y TS) |
+| 6 | **Adapter** | `DeviceGateway` + `DeviceMonitorService` con `LegacyScadaAdapter` / `PvInverterAdapter` (PHP y TS) |
+| 7 | **Bridge** | `EnergyBill` (`ResidentialBill` / `CommercialBill`) + `CurrencyBridge` (`CopCurrency` / `UsdCurrency` / `EurCurrency`) (PHP y TS) |
 
 *Próximamente se implementará el siguiente patrón de diseño...*
