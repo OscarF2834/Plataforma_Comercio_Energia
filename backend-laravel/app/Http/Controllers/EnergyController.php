@@ -7,6 +7,8 @@ use App\Patterns\LoggerService;
 use App\Patterns\ConfigService;
 use App\Patterns\Adapters\DeviceGatewayRegistry;
 use App\Patterns\Adapters\DeviceMonitorService;
+use App\Patterns\Composite\BundleService;
+use App\Patterns\Decorators\OfferPricingService;
 use App\Patterns\Bridges\SettlementService;
 use App\Patterns\Factories\EnergySourceFactory;
 use App\Patterns\Factories\PredictorFactory;
@@ -25,6 +27,8 @@ class EnergyController extends Controller
     private DeviceMonitorService $devices;
     private DeviceGatewayRegistry $deviceRegistry;
     private SettlementService $settlements;
+    private OfferPricingService $pricing;
+    private BundleService $bundles;
 
     public function __construct()
     {
@@ -42,6 +46,12 @@ class EnergyController extends Controller
         // Patron Bridge: el cliente compone abstraccion (EnergyBill) e
         // implementor (CurrencyBridge) segun el perfil y la moneda pedidos.
         $this->settlements = new SettlementService();
+
+        // Patron Decorator: oferta base + extras envolvientes.
+        $this->pricing = new OfferPricingService();
+
+        // Patron Composite: paquetes de energia con totales recursivos.
+        $this->bundles = new BundleService();
     }
 
     public function createOffer(Request $request): JsonResponse
@@ -264,5 +274,58 @@ class EnergyController extends Controller
         $this->logger->log("Liquidacion {$bill['profile']} en {$bill['currency']} por {$data['kwh']} kWh: {$bill['totalFormatted']} (Bridge)");
 
         return response()->json($bill, 201);
+    }
+
+    public function getExtrasCatalog(): JsonResponse
+    {
+        // Patron Decorator: catalogo de decoradores disponibles para envolver una oferta.
+        return response()->json($this->pricing->getExtrasCatalog());
+    }
+
+    public function quoteWithExtras(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'kwh' => 'required|numeric|min:0.1',
+            'pricePerKwh' => 'required|numeric|min:0',
+            'extras' => 'nullable|array',
+            'extras.*' => 'string|in:green,insurance,priority',
+        ]);
+
+        try {
+            // Patron Decorator: BasicOffer envuelto con los decoradores elegidos.
+            $quote = $this->pricing->quote(
+                (float) $data['kwh'],
+                (float) $data['pricePerKwh'],
+                $data['extras'] ?? [],
+            );
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
+
+        $this->logger->log("Cotizacion con extras (Decorator): +" . implode(',', $data['extras'] ?? []) . " -> {$quote['total']} COP");
+
+        return response()->json($quote, 201);
+    }
+
+    public function getSampleBundle(): JsonResponse
+    {
+        // Patron Composite: arbol de demostracion con totales recursivos.
+        return response()->json($this->bundles->getSampleTree());
+    }
+
+    public function evaluateBundle(Request $request): JsonResponse
+    {
+        $tree = $request->all();
+
+        try {
+            // Patron Composite: re-evalua el arbol JSON con totales recursivos.
+            $evaluated = $this->bundles->evaluate($tree);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
+
+        $this->logger->log("Paquete evaluado (Composite): {$evaluated['totalKwh']} kWh, {$evaluated['totalPrice']} COP");
+
+        return response()->json($evaluated);
     }
 }

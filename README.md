@@ -30,6 +30,10 @@ El proyecto está planteado como un **prototipo funcional académico**. No tendr
 - [14. `DeviceGateway` / `DevicePanel` (Adapter — Frontend)](#14-devicegateway--devicepanel--frontend)
 - [15. `EnergyBill` / `CurrencyBridge` (Bridge — Backend)](#15-energybill--currencybridge--backend)
 - [16. `EnergyBill` / `CurrencyBridge` (Bridge — Frontend)](#16-energybill--currencybridge--frontend)
+- [17. `BasicOffer` / `OfferDecorator` (Decorator — Backend)](#17-basicoffer--offerdecorator--offerpricingservice--backend)
+- [18. `BasicOffer` / `OfferDecorator` (Decorator — Frontend)](#18-basicoffer--offerdecorator--offerpricingservice--frontend)
+- [19. `EnergyBundle` / `OfferLeaf` (Composite — Backend)](#19-energybundle--offerleaf--bundleservice--backend)
+- [20. `EnergyBundle` / `OfferLeaf` (Composite — Frontend)](#20-energybundle--offerleaf--bundleservice--frontend)
 
 ---
 
@@ -55,7 +59,7 @@ Desarrollar una plataforma web para gestionar el intercambio de excedentes de en
 | Frontend | React + TypeScript + Vite |
 | Backend | Laravel + PHP |
 | Base de datos | Memoria (in-memory) persistida en JSON |
-| Patrones de diseño | Singleton, Factory Method, Abstract Method, Builder, Prototype, Adapter, Bridge |
+| Patrones de diseño | Singleton, Factory Method, Abstract Method, Builder, Prototype, Adapter, Bridge, Decorator, Composite |
 
 ---
 
@@ -349,6 +353,10 @@ De esta manera, el proyecto permitirá demostrar el funcionamiento de un mercado
 | 14 | [Adapter](#14-devicegateway--devicepanel--frontend) · `DeviceGateway` + `DevicePanel` | Frontend | [Ir](#14-devicegateway--devicepanel--frontend) |
 | 15 | [Bridge](#15-energybill--currencybridge--backend) · `EnergyBill` + `CurrencyBridge` | Backend | [Ir](#15-energybill--currencybridge--backend) |
 | 16 | [Bridge](#16-energybill--currencybridge--frontend) · `EnergyBill` + `CurrencyBridge` | Frontend | [Ir](#16-energybill--currencybridge--frontend) |
+| 17 | [Decorator](#17-basicoffer--offerdecorator--offerpricingservice--backend) · `OfferPricingService` | Backend | [Ir](#17-basicoffer--offerdecorator--offerpricingservice--backend) |
+| 18 | [Decorator](#18-basicoffer--offerdecorator--offerpricingservice--frontend) · `OfferPricingService` | Frontend | [Ir](#18-basicoffer--offerdecorator--offerpricingservice--frontend) |
+| 19 | [Composite](#19-energybundle--offerleaf--bundleservice--backend) · `EnergyBundle` + `OfferLeaf` | Backend | [Ir](#19-energybundle--offerleaf--bundleservice--backend) |
+| 20 | [Composite](#20-energybundle--offerleaf--bundleservice--frontend) · `EnergyBundle` + `OfferLeaf` | Frontend | [Ir](#20-energybundle--offerleaf--bundleservice--frontend) |
 
 ---
 
@@ -3373,6 +3381,180 @@ const sameTotal = Math.abs(localBill.total - backendBill.total) < 0.01;
 
 ---
 
+# Patrón Decorator
+
+## ¿Qué es dentro del proyecto?
+
+El **Decorator** se usa para agregarle **extras a una oferta de energía** sin modificar la oferta original: certificación verde, seguro de suministro y entrega prioritaria. En lugar de crear una clase por cada combinación de extras, una **oferta base** (`BasicOffer`) se **envuelve** con uno o varios decoradores, cada uno con su recargo, su etiqueta y su descripción, acumulados de forma anidada.
+
+Se aplica al subsistema de **compra y venta de excedentes**: la oferta publicada es el componente concreto y los extras son funcionalidades añadidas dinámicamente, en cualquier orden y cantidad.
+
+**Implementaciones actuales (2):**
+
+- `BasicOffer` + decoradores + `OfferPricingService` — Backend (PHP)
+- `BasicOffer` + decoradores + `OfferPricingService` — Frontend (TypeScript)
+
+---
+
+## 17. `BasicOffer` / `OfferDecorator` / `OfferPricingService` — Backend
+
+**Archivos:** `backend-laravel/app/Patterns/Decorators/OfferComponent.php`, `BasicOffer.php`, `OfferDecorator.php`, `GreenCertificationDecorator.php`, `InsuranceDecorator.php`, `PriorityDeliveryDecorator.php` y `OfferPricingService.php`
+
+**En qué consiste dentro del proyecto:** `OfferComponent` es la interfaz común (`getDescription()`, `getBasePrice()`, `getExtrasTotal()`, `getTotal()`, `getAdjustments()`). `BasicOffer` es el componente concreto: subtotal = kWh × precio. `OfferDecorator` es el decorador base que delega todo en el componente envuelto, y cada decorador concreto añade un ajuste:
+
+- `GreenCertificationDecorator` — +5% sobre el subtotal base.
+- `InsuranceDecorator` — +3% sobre el subtotal base.
+- `PriorityDeliveryDecorator` — +$8.000 COP tarifa fija.
+
+`OfferPricingService` es el cliente: envuelve el `BasicOffer` con los decoradores solicitados. Endpoints: `GET /api/energy/extras` (catálogo de extras) y `POST /api/energy/offers/quote-extras` (cotización decorada).
+
+**Diagrama UML:**
+
+```
+┌──────────────────────────────────┐
+│         «interface»              │
+│        OfferComponent            │
+├──────────────────────────────────┤
+│ + getDescription() : string      │
+│ + getBasePrice() : float         │
+│ + getExtrasTotal() : float       │
+│ + getTotal() : float             │
+│ + getAdjustments() : array       │
+└───────────────▲──────────────────┘
+                │ implementa
+      ┌─────────┴─────────┐
+      ▼                   ▼
+┌──────────────┐  ┌────────────────────────┐
+│  BasicOffer  │  │   «abstract»           │
+│ (componente  │  │   OfferDecorator       │
+│  concreto)   │  │ - wrapped : OfferComponent │
+└──────────────┘  └───────────▲────────────┘
+                              │ extienden
+        ┌─────────────────────┼─────────────────────┐
+        ▼                     ▼                     ▼
+┌───────────────────┐ ┌───────────────┐ ┌─────────────────────────┐
+│ GreenCertification│ │  Insurance    │ │  PriorityDelivery       │
+│ Decorator  (+5%)  │ │  Decorator(+3%)│ │  Decorator  (+$8.000)  │
+└───────────────────┘ └───────────────┘ └─────────────────────────┘
+```
+
+**Código clave:**
+
+```php
+$offer = new BasicOffer(20, 500);                // componente concreto
+$offer = new GreenCertificationDecorator($offer); // lo envuelve: +5%
+$offer = new PriorityDeliveryDecorator($offer);    // lo vuelve a envolver: +$8.000
+
+echo $offer->getTotal(); // 10000 + 500 + 8000 = 18500
+```
+
+---
+
+## 18. `BasicOffer` / `OfferDecorator` / `OfferPricingService` — Frontend
+
+**Archivos:** `frontend/src/patterns/decorator/OfferComponent.ts`, `BasicOffer.ts`, `OfferDecorator.ts`, `GreenCertificationDecorator.ts`, `InsuranceDecorator.ts`, `PriorityDeliveryDecorator.ts`, `OfferPricingService.ts` y `frontend/src/components/OfferExtrasPanel.tsx`
+
+**En qué consiste dentro del proyecto:** La misma estructura del Decorator en TypeScript. `OfferExtrasPanel` muestra el cálculo **local** (navegador) y ofrece el botón **Cotizar en el backend** para validar que `OfferPricingService` de PHP produce exactamente el mismo total (misma descripción, mismo desglose de ajustes). El usuario puede marcar/desmarcar decoradores y el precio se recompone al instante.
+
+**Código clave:**
+
+```typescript
+const api = EnergyApiService.getInstance();
+
+// Decorator en el FRONTEND (TypeScript)
+const local = offerPricingService.quote(20, 500, ['green', 'priority']);
+
+// Decorator en el BACKEND (PHP): se valida que ambos coinciden
+const backend = await api.quoteWithExtras({ kwh: 20, pricePerKwh: 500, extras: ['green', 'priority'] });
+const sameTotal = Math.abs(local.total - backend.total) < 0.01;
+```
+
+---
+
+# Patrón Composite
+
+## ¿Qué es dentro del proyecto?
+
+El **Composite** se usa para agrupar ofertas de energía en **paquetes** que pueden contener otras ofertas u otros paquetes, formando un árbol. `OfferLeaf` es la hoja (una oferta individual) y `EnergyBundle` es el compuesto (un nodo con hijos). Ambos implementan `BundleComponent`, de modo que el cliente recorre el árbol sin distinguir hojas de compuestos: los **totales de kWh y de precio se calculan recursivamente** sobre todo el subárbol.
+
+Se aplica al subsistema de **compra y venta de excedentes** y al objetivo específico de gestionar los excedentes de forma organizada y extensible.
+
+**Implementaciones actuales (2):**
+
+- `EnergyBundle` + `OfferLeaf` + `BundleService` — Backend (PHP)
+- `EnergyBundle` + `OfferLeaf` + `BundleService` — Frontend (TypeScript)
+
+---
+
+## 19. `EnergyBundle` / `OfferLeaf` / `BundleService` — Backend
+
+**Archivos:** `backend-laravel/app/Patterns/Composite/BundleComponent.php`, `OfferLeaf.php`, `EnergyBundle.php` y `BundleService.php`
+
+**En qué consiste dentro del proyecto:** `BundleComponent` es la interfaz común (`getName()`, `getTotalKwh()`, `getTotalPrice()`, `countLeaves()`, `getChildren()`, `toArray()`). `OfferLeaf` suma sus propios kWh y precio. `EnergyBundle` agrega hijos (`add()`) y calcula sus totales **recursivamente** como la suma de los totales de sus hijos, sin importar la profundidad. `BundleService` construye un árbol de demostración (`Paquete del Mercado` → dos paquetes hijos → ofertas) y expone `GET /api/energy/bundles/sample` y `POST /api/energy/bundles/evaluate` (evalúa un árbol JSON donde cada nodo declara `type: "offer"` o `type: "bundle"`).
+
+**Diagrama UML:**
+
+```
+┌───────────────────────────────┐
+│         «interface»           │
+│        BundleComponent        │
+├───────────────────────────────┤
+│ + getName() : string          │
+│ + getTotalKwh() : float       │
+│ + getTotalPrice() : float     │
+│ + countLeaves() : int         │
+│ + getChildren() : array       │
+└───────────────▲───────────────┘
+                │ implementa
+      ┌─────────┴──────────┐
+      ▼                    ▼
+┌─────────────┐   ┌──────────────────────────┐
+│  OfferLeaf  │   │     EnergyBundle         │
+│  (hoja: 1   │   │ - children : array       │
+│  oferta)    │   │ + add(child)             │
+└─────────────┘   │ + getTotalKwh() = Σ hijos│ (recursivo)
+                  │ + getTotalPrice() = Σ hijos (recursivo)
+                  └────────────┬─────────────┘
+                               │ contiene 0..*
+                               ▼
+                        BundleComponent
+                        (puede anidar bundles)
+```
+
+**Código clave:**
+
+```php
+$solar = new EnergyBundle('Paquete Solar');
+$solar->add(new OfferLeaf('Paneles techo', 15, 480, 'solar'))
+      ->add(new OfferLeaf('Excedente patio', 5, 500, 'solar'));
+
+$market = new EnergyBundle('Paquete del Mercado');
+$market->add($solar)->add($renewable);
+
+echo $market->getTotalPrice(); // se calcula solo, sin importar la profundidad
+```
+
+---
+
+## 20. `EnergyBundle` / `OfferLeaf` / `BundleService` — Frontend
+
+**Archivos:** `frontend/src/patterns/composite/BundleComponent.ts`, `OfferLeaf.ts`, `EnergyBundle.ts`, `BundleService.ts` y `frontend/src/components/BundlePanel.tsx`
+
+**En qué consiste dentro del proyecto:** La misma estructura del Composite en TypeScript. `BundlePanel` muestra el árbol con los totales recursivos calculados en el navegador, permite agregar una oferta nueva al paquete raíz (los totales se recalculan) y, al pulsar **Evaluar árbol en el backend**, envía el mismo árbol a `POST /api/energy/bundles/evaluate` para validar que el Composite de PHP produce los mismos totales.
+
+**Código clave:**
+
+```typescript
+// Composite en el FRONTEND (TypeScript)
+const local = bundleService.evaluate(tree);
+
+// Composite en el BACKEND (PHP): se valida que ambos coinciden
+const backend = await api.evaluateBundle(tree);
+const sameTotal = Math.abs(local.totalPrice - backend.totalPrice) < 0.01;
+```
+
+---
+
 # Guía de Ejecución
 
 ## Backend (Laravel)
@@ -3417,6 +3599,10 @@ El frontend corre en `http://localhost:5173`.
 | GET | `/api/energy/devices/telemetry/summary` | Ver el consolidado de la red IoT: en línea, kW totales y reparto por fabricante (Adapter) |
 | GET | `/api/energy/settlements/matrix` | Ver la matriz de liquidaciones: perfiles × monedas (Bridge) |
 | POST | `/api/energy/settlements/quote` | Emitir una liquidación uniendo `EnergyBill` + `CurrencyBridge` (Bridge) |
+| GET | `/api/energy/extras` | Ver el catálogo de extras envolventes (Decorator) |
+| POST | `/api/energy/offers/quote-extras` | Cotizar una oferta envolviendo `BasicOffer` con decoradores (Decorator) |
+| GET | `/api/energy/bundles/sample` | Ver el árbol de paquetes de ejemplo con totales recursivos (Composite) |
+| POST | `/api/energy/bundles/evaluate` | Evaluar un árbol JSON de paquetes/ofertas (Composite) |
 
 ## Ejemplo de Request
 
@@ -3503,6 +3689,19 @@ curl -X POST http://localhost:8000/api/energy/settlements/quote \
 curl -X POST http://localhost:8000/api/energy/settlements/quote \
   -H "Content-Type: application/json" \
   -d '{"profile": "commercial", "currency": "EUR", "kwh": 50, "pricePerKwh": 10}'
+
+# Cotizar una oferta envuelta con decoradores (Decorator)
+curl -X POST http://localhost:8000/api/energy/offers/quote-extras \
+  -H "Content-Type: application/json" \
+  -d '{"kwh": 20, "pricePerKwh": 500, "extras": ["green", "priority"]}'
+
+# Arbol de paquetes de ejemplo con totales recursivos (Composite)
+curl http://localhost:8000/api/energy/bundles/sample
+
+# Evaluar un arbol JSON propio (Composite)
+curl -X POST http://localhost:8000/api/energy/bundles/evaluate \
+  -H "Content-Type: application/json" \
+  -d '{"type": "bundle", "name": "Mi paquete", "children": [{"type": "offer", "name": "Solar techo", "kwh": 10, "pricePerKwh": 500}, {"type": "offer", "name": "Eolica finca", "kwh": 8, "pricePerKwh": 450}]}'
 ```
 
 ## Patrones de diseño implementados
@@ -3518,5 +3717,7 @@ Hasta el momento se han implementado y documentado en este README los siguientes
 | 5 | **Prototype** | `Prototype`, `OfferPrototype`, `PrototypeRegistry` (PHP y TS) |
 | 6 | **Adapter** | `DeviceGateway` + `DeviceMonitorService` con `LegacyScadaAdapter` / `PvInverterAdapter` (PHP y TS) |
 | 7 | **Bridge** | `EnergyBill` (`ResidentialBill` / `CommercialBill`) + `CurrencyBridge` (`CopCurrency` / `UsdCurrency` / `EurCurrency`) (PHP y TS) |
+| 8 | **Decorator** | `BasicOffer` + `GreenCertificationDecorator` / `InsuranceDecorator` / `PriorityDeliveryDecorator` + `OfferPricingService` (PHP y TS) |
+| 9 | **Composite** | `EnergyBundle` (compuesto) + `OfferLeaf` (hoja) + `BundleService` (PHP y TS) |
 
 *Próximamente se implementará el siguiente patrón de diseño...*

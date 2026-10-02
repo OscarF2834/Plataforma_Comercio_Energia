@@ -25,4 +25,12 @@ Route::prefix('energy')->group(function () {
     // Patron Bridge: matriz de liquidaciones (perfil x moneda) y emision.
     Route::get('/settlements/matrix', [EnergyController::class, 'getSettlementMatrix']);
     Route::post('/settlements/quote', [EnergyController::class, 'quoteSettlement']);
+
+    // Patron Decorator: catalogo de extras y cotizacion de una oferta decorada.
+    Route::get('/extras', [EnergyController::class, 'getExtrasCatalog']);
+    Route::post('/offers/quote-extras', [EnergyController::class, 'quoteWithExtras']);
+
+    // Patron Composite: arbol de ejemplo y evaluacion de paquetes anidados.
+    Route::get('/bundles/sample', [EnergyController::class, 'getSampleBundle']);
+    Route::post('/bundles/evaluate', [EnergyController::class, 'evaluateBundle']);
 });

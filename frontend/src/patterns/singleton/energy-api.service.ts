@@ -193,6 +193,40 @@ class EnergyApiService {
     if (!response.ok) throw new Error('Error al emitir la liquidacion');
     return response.json();
   }
+
+  // Patron Decorator: catalogo de extras y cotizacion con decoradores.
+  async getExtrasCatalog() {
+    const response = await fetch(`${this.baseUrl}/energy/extras`);
+    if (!response.ok) throw new Error('Error al obtener los extras');
+    return response.json();
+  }
+
+  async quoteWithExtras(data: { kwh: number; pricePerKwh: number; extras: string[] }) {
+    const response = await fetch(`${this.baseUrl}/energy/offers/quote-extras`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Error al cotizar con extras');
+    return response.json();
+  }
+
+  // Patron Composite: arbol de ejemplo y evaluacion de paquetes.
+  async getSampleBundle() {
+    const response = await fetch(`${this.baseUrl}/energy/bundles/sample`);
+    if (!response.ok) throw new Error('Error al obtener el paquete de ejemplo');
+    return response.json();
+  }
+
+  async evaluateBundle(tree: unknown) {
+    const response = await fetch(`${this.baseUrl}/energy/bundles/evaluate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(tree),
+    });
+    if (!response.ok) throw new Error('Error al evaluar el paquete');
+    return response.json();
+  }
 }
 
 export default EnergyApiService;

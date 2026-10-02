@@ -4,6 +4,8 @@ import PredictionPanel from './components/PredictionPanel';
 import OfferPrototypePanel from './components/OfferPrototypePanel';
 import DevicePanel from './components/DevicePanel';
 import SettlementPanel from './components/SettlementPanel';
+import OfferExtrasPanel from './components/OfferExtrasPanel';
+import BundlePanel from './components/BundlePanel';
 import { useState } from 'react';
 
 function App() {
@@ -42,6 +44,12 @@ function App() {
         </div>
         <div style={styles.predictRow}>
           <SettlementPanel />
+        </div>
+        <div style={styles.predictRow}>
+          <OfferExtrasPanel />
+        </div>
+        <div style={styles.predictRow}>
+          <BundlePanel />
         </div>
       </main>
     </div>
