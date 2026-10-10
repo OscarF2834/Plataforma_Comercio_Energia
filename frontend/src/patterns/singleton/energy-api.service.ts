@@ -1,3 +1,5 @@
+import type { MarketContext, Prediction } from '../template/Predictor';
+
 export interface EnergyOffer {
   id?: number;
   producerName: string;
@@ -39,6 +41,57 @@ export interface SettlementMatrix {
   }[];
   combinations: string[];
   totalCombinations: number;
+}
+
+// ------------------------------------------------------------------
+// Patron Facade: respuestas de las operaciones unificadas.
+// ------------------------------------------------------------------
+
+export interface ActivityMetrics {
+  totalLogs: number;
+  transactionCount: number;
+  offerCount: number;
+  recentLogs: string[];
+}
+
+export interface PlatformConfig {
+  marketName: string;
+  defaultPricePerKwh: number;
+  currency: string;
+  maxOfferKwh: number;
+}
+
+/** Panel unificado: UNA sola llamada agrega todo el subsistema. */
+export interface PlatformDashboard {
+  market: MarketContext;
+  offers: EnergyOffer[];
+  iot: TelemetrySummary;
+  config: PlatformConfig;
+  activity: ActivityMetrics;
+}
+
+/** Liquidacion emitida por el patron Bridge. */
+export interface SettlementBill {
+  profile: string;
+  currency: string;
+  adjustments: { label: string; amount: number }[];
+  total: number;
+  totalFormatted: string;
+  totalMinorUnits: number;
+}
+
+export interface SurplusAdvice {
+  predictions: Prediction[];
+  market: MarketContext;
+  advice: string;
+}
+
+export interface BuyResult {
+  success: boolean;
+  message: string;
+  purchase?: { offerId: number; kwh: number; pricePerKwh: number };
+  bill?: SettlementBill;
+  market: MarketContext;
 }
 
 class EnergyApiService {
@@ -225,6 +278,71 @@ class EnergyApiService {
       body: JSON.stringify(tree),
     });
     if (!response.ok) throw new Error('Error al evaluar el paquete');
+    return response.json();
+  }
+
+  // ----------------------------------------------------------------
+  // Patron Facade: operaciones unificadas de la plataforma.
+  // El Facade (patterns/facade/PlatformFacade) delega aqui.
+  // ----------------------------------------------------------------
+
+  /** Panel unificado: mercado + ofertas + red IoT + configuracion + actividad. */
+  async getPlatformDashboard(): Promise<PlatformDashboard> {
+    const response = await fetch(`${this.baseUrl}/energy/platform/dashboard`);
+    if (!response.ok) throw new Error('Error al cargar el panel unificado');
+    return response.json();
+  }
+
+  /** Publica un excedente: lo construye, registra y contabiliza. */
+  async publishSurplus(data: {
+    producerName: string;
+    totalKwh: number;
+    pricePerKwh: number;
+    energyType?: string;
+    description?: string;
+  }): Promise<{ offer: EnergyOffer; market: MarketContext }> {
+    const response = await fetch(`${this.baseUrl}/energy/platform/publish-surplus`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Error al publicar el excedente');
+    return response.json();
+  }
+
+  /** Compra energia: compra en el mercado + liquidacion (Bridge). */
+  async buyEnergy(
+    offerId: number,
+    kwh: number,
+    profile = 'residential',
+    currency = 'COP'
+  ): Promise<BuyResult> {
+    const response = await fetch(`${this.baseUrl}/energy/platform/buy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ offerId, kwh, profile, currency }),
+    });
+    if (!response.ok) throw new Error('Error al comprar energia');
+    return response.json();
+  }
+
+  /** Asesoria de excedente: predicciones + mercado + recomendacion. */
+  async getSurplusAdvice(production = 0, consumption = 0): Promise<SurplusAdvice> {
+    const params = new URLSearchParams();
+    if (production > 0) params.set('production', String(production));
+    if (consumption > 0) params.set('consumption', String(consumption));
+    const query = params.toString();
+    const response = await fetch(
+      `${this.baseUrl}/energy/platform/advice${query ? `?${query}` : ''}`
+    );
+    if (!response.ok) throw new Error('Error al obtener la asesoria de excedente');
+    return response.json();
+  }
+
+  /** Estado de la red IoT: resumen + inventario normalizado. */
+  async getIoTNetworkStatus(): Promise<{ summary: TelemetrySummary; devices: DeviceInfo[] }> {
+    const response = await fetch(`${this.baseUrl}/energy/platform/iot-status`);
+    if (!response.ok) throw new Error('Error al obtener el estado de la red IoT');
     return response.json();
   }
 }

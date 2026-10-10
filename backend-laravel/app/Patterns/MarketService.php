@@ -161,6 +161,16 @@ class MarketService
         return $offer;
     }
 
+    public function getOfferById(int $id): ?EnergyOffer
+    {
+        foreach ($this->offers as $offer) {
+            if ($offer->id === $id) {
+                return $offer;
+            }
+        }
+        return null;
+    }
+
     public function getAvailableOffers(): array
     {
         return array_filter($this->offers, fn($o) => $o->availableKwh > 0);

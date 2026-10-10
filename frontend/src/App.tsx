@@ -6,6 +6,7 @@ import DevicePanel from './components/DevicePanel';
 import SettlementPanel from './components/SettlementPanel';
 import OfferExtrasPanel from './components/OfferExtrasPanel';
 import BundlePanel from './components/BundlePanel';
+import PlatformPanel from './components/PlatformPanel';
 import { useState } from 'react';
 
 function App() {
@@ -50,6 +51,9 @@ function App() {
         </div>
         <div style={styles.predictRow}>
           <BundlePanel />
+        </div>
+        <div style={styles.predictRow}>
+          <PlatformPanel onSystemChanged={handleOfferCreated} />
         </div>
       </main>
     </div>

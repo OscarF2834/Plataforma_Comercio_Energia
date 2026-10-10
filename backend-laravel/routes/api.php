@@ -33,4 +33,11 @@ Route::prefix('energy')->group(function () {
     // Patron Composite: arbol de ejemplo y evaluacion de paquetes anidados.
     Route::get('/bundles/sample', [EnergyController::class, 'getSampleBundle']);
     Route::post('/bundles/evaluate', [EnergyController::class, 'evaluateBundle']);
+
+    // Patron Facade: interfaz unificada a todos los subsistemas.
+    Route::get('/platform/dashboard', [EnergyController::class, 'getPlatformDashboard']);
+    Route::post('/platform/publish-surplus', [EnergyController::class, 'publishSurplus']);
+    Route::post('/platform/buy', [EnergyController::class, 'buyEnergy']);
+    Route::get('/platform/advice', [EnergyController::class, 'getSurplusAdvice']);
+    Route::get('/platform/iot-status', [EnergyController::class, 'getIoTNetworkStatus']);
 });

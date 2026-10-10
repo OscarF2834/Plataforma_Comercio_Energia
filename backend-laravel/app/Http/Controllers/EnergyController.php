@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Patterns\MarketService;
 use App\Patterns\LoggerService;
 use App\Patterns\ConfigService;
+use App\Patterns\Facades\EnergyPlatformFacade;
 use App\Patterns\Adapters\DeviceGatewayRegistry;
 use App\Patterns\Adapters\DeviceMonitorService;
 use App\Patterns\Composite\BundleService;
@@ -29,6 +30,7 @@ class EnergyController extends Controller
     private SettlementService $settlements;
     private OfferPricingService $pricing;
     private BundleService $bundles;
+    private EnergyPlatformFacade $platform;
 
     public function __construct()
     {
@@ -52,6 +54,9 @@ class EnergyController extends Controller
 
         // Patron Composite: paquetes de energia con totales recursivos.
         $this->bundles = new BundleService();
+
+        // Patron Facade: interfaz unificada a TODOS los subsistemas.
+        $this->platform = new EnergyPlatformFacade();
     }
 
     public function createOffer(Request $request): JsonResponse
@@ -327,5 +332,80 @@ class EnergyController extends Controller
         $this->logger->log("Paquete evaluado (Composite): {$evaluated['totalKwh']} kWh, {$evaluated['totalPrice']} COP");
 
         return response()->json($evaluated);
+    }
+
+    // ------------------------------------------------------------------
+    // Patron Facade: una sola llamada coordina todos los subsistemas.
+    // ------------------------------------------------------------------
+
+    public function getPlatformDashboard(): JsonResponse
+    {
+        // Patron Facade: el panel unificado agrega mercado, ofertas,
+        // red IoT, configuracion y actividad en UNA sola llamada.
+        $this->logger->log('Consulta del panel unificado de la plataforma (Facade)');
+
+        return response()->json($this->platform->getDashboard());
+    }
+
+    public function publishSurplus(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'producerName' => 'required|string',
+            'totalKwh' => 'required|numeric|min:1',
+            'pricePerKwh' => 'required|numeric|min:0',
+            'description' => 'nullable|string',
+            'energyType' => 'nullable|string|in:solar,wind,hydro',
+        ]);
+
+        try {
+            // Patron Facade: construye (Builder), registra, contabiliza
+            // y logea el excedente en una sola operacion.
+            $result = $this->platform->publishSurplus($data);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
+
+        return response()->json($result, 201);
+    }
+
+    public function buyEnergy(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'offerId' => 'required|integer',
+            'kwh' => 'required|numeric|min:0.1',
+            'profile' => 'nullable|string|in:residential,commercial',
+            'currency' => 'nullable|string|in:COP,USD,EUR',
+        ]);
+
+        // Patron Facade: compra en el mercado + liquidacion (Bridge)
+        // de la energia adquirida, todo en una sola llamada.
+        $result = $this->platform->buyEnergy(
+            (int) $data['offerId'],
+            (float) $data['kwh'],
+            $data['profile'] ?? 'residential',
+            $data['currency'] ?? 'COP',
+        );
+
+        return response()->json($result, $result['success'] ? 200 : 422);
+    }
+
+    public function getSurplusAdvice(Request $request): JsonResponse
+    {
+        $production = (float) $request->query('production', 0);
+        $consumption = (float) $request->query('consumption', 0);
+
+        // Patron Facade: predicciones (Abstract Method) + contexto
+        // real del mercado + recomendacion accionable.
+        $advice = $this->platform->getSurplusAdvice($production, $consumption);
+
+        $this->logger->log("Asesoria de excedente via Facade (produccion: {$production}, consumo: {$consumption})");
+
+        return response()->json($advice);
+    }
+
+    public function getIoTNetworkStatus(): JsonResponse
+    {
+        // Patron Facade: inventario + resumen de la red IoT.
+        return response()->json($this->platform->getIoTNetworkStatus());
     }
 }

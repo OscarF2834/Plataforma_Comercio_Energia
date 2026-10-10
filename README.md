@@ -34,6 +34,8 @@ El proyecto está planteado como un **prototipo funcional académico**. No tendr
 - [18. `BasicOffer` / `OfferDecorator` (Decorator — Frontend)](#18-basicoffer--offerdecorator--offerpricingservice--frontend)
 - [19. `EnergyBundle` / `OfferLeaf` (Composite — Backend)](#19-energybundle--offerleaf--bundleservice--backend)
 - [20. `EnergyBundle` / `OfferLeaf` (Composite — Frontend)](#20-energybundle--offerleaf--bundleservice--frontend)
+- [21. `EnergyPlatformFacade` (Facade — Backend)](#21-energyplatformfacade--backend)
+- [22. `PlatformFacade` (Facade — Frontend)](#22-platformfacade--frontend)
 
 ---
 
@@ -59,7 +61,7 @@ Desarrollar una plataforma web para gestionar el intercambio de excedentes de en
 | Frontend | React + TypeScript + Vite |
 | Backend | Laravel + PHP |
 | Base de datos | Memoria (in-memory) persistida en JSON |
-| Patrones de diseño | Singleton, Factory Method, Abstract Method, Builder, Prototype, Adapter, Bridge, Decorator, Composite |
+| Patrones de diseño | Singleton, Factory Method, Abstract Method, Builder, Prototype, Adapter, Bridge, Decorator, Composite, Facade |
 
 ---
 
@@ -357,6 +359,8 @@ De esta manera, el proyecto permitirá demostrar el funcionamiento de un mercado
 | 18 | [Decorator](#18-basicoffer--offerdecorator--offerpricingservice--frontend) · `OfferPricingService` | Frontend | [Ir](#18-basicoffer--offerdecorator--offerpricingservice--frontend) |
 | 19 | [Composite](#19-energybundle--offerleaf--bundleservice--backend) · `EnergyBundle` + `OfferLeaf` | Backend | [Ir](#19-energybundle--offerleaf--bundleservice--backend) |
 | 20 | [Composite](#20-energybundle--offerleaf--bundleservice--frontend) · `EnergyBundle` + `OfferLeaf` | Frontend | [Ir](#20-energybundle--offerleaf--bundleservice--frontend) |
+| 21 | [Facade](#21-energyplatformfacade--backend) · `EnergyPlatformFacade` | Backend | [Ir](#21-energyplatformfacade--backend) |
+| 22 | [Facade](#22-platformfacade--frontend) · `PlatformFacade` | Frontend | [Ir](#22-platformfacade--frontend) |
 
 ---
 
@@ -3555,6 +3559,558 @@ const sameTotal = Math.abs(local.totalPrice - backend.totalPrice) < 0.01;
 
 ---
 
+# Patrón Facade
+
+## ¿Qué es dentro del proyecto?
+
+El **Facade** se usa en el proyecto para **unificar el acceso a los subsistemas de la plataforma** (compra y venta de excedentes, predicción de producción/consumo, dispositivos IoT y liquidaciones). Cada subsistema está compuesto por varios servicios y patrones: `MarketService`, `LoggerService` y `ConfigService` (Singleton), `DeviceMonitorService` (Adapter), `SettlementService` (Bridge), `OfferPricingService` (Decorator), `BundleService` (Composite) y `PredictorFactory` (Factory Method). Sin el Facade, el controlador y el frontend debían conocer **cada servicio y cada endpoint por separado** para operaciones simples de negocio.
+
+El Facade resuelve esto con una **interfaz simplificada de alto nivel** de cinco operaciones:
+
+- `getDashboard()` → panel unificado: mercado + ofertas disponibles + red IoT + configuración + actividad, en **una sola llamada**.
+- `publishSurplus()` → publica un excedente: lo construye (Builder), lo registra, lo contabiliza y lo loguea.
+- `buyEnergy()` → compra energía **y** emite su liquidación (Bridge) en la misma operación.
+- `getSurplusAdvice()` → predicciones (Abstract Method) + contexto real del mercado + recomendación accionable.
+- `getIoTNetworkStatus()` → inventario normalizado (Adapter) + resumen consolidado de la red.
+
+Se aplica directamente a los objetivos específicos: gestionar la producción, el consumo y los excedentes; clasificar los tipos de energía (validados internamente por `EnergySourceFactory`); realizar compras y ventas; consultar el historial de transacciones; y apoyar la toma de decisiones con predicciones.
+
+**Implementaciones actuales (2):**
+
+- `EnergyPlatformFacade` — Backend (PHP)
+- `PlatformFacade` — Frontend (TypeScript)
+
+---
+
+## 21. `EnergyPlatformFacade` — Backend
+
+**Archivo:** `backend-laravel/app/Patterns/Facades/EnergyPlatformFacade.php`
+
+**En qué consiste dentro del proyecto:** `EnergyPlatformFacade` es el **único punto de entrada** a los subsistemas. Su constructor arma las dependencias (los Singleton del mercado, logs y configuración; la fábrica de predictores; el monitor de dispositivos; el servicio de liquidaciones; el de extras y el de paquetes) y expone cinco operaciones de negocio. El controlador ya **no** inyecta cada servicio: solo recibe el Facade.
+
+Internamente reutiliza los patrones ya implementados: `publishSurplus` construye la oferta con el **Builder** (`OfferDirector` + `EnergyOfferBuilder`) y valida el tipo con el **Factory Method** (`EnergySourceFactory`); `buyEnergy` compra en el mercado y emite la liquidación con el **Bridge** (`SettlementService`); `getSurplusAdvice` genera las predicciones con el **Abstract Method** (`PredictorFactory` + `AbstractPredictor`) ligadas al estado real del mercado; `getIoTNetworkStatus` usa el **Adapter** (`DeviceMonitorService`). Para liquidar la compra, el Facade localiza la oferta con `MarketService::getOfferById()` (añadido para este fin) y toma su precio.
+
+**Endpoints del patrón Facade** (todos bajo `/api/energy/platform/*`):
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| GET | `/api/energy/platform/dashboard` | Panel unificado: mercado, ofertas, red IoT, configuración y actividad en **una sola llamada** |
+| POST | `/api/energy/platform/publish-surplus` | Publica un excedente: lo construye (Builder), registra, contabiliza y loguea |
+| POST | `/api/energy/platform/buy` | Compra energía **y** emite su liquidación (Bridge) en la misma operación |
+| GET | `/api/energy/platform/advice` | Asesoría de excedente: predicciones + mercado + recomendación accionable. Acepta `?production=&consumption=` |
+| GET | `/api/energy/platform/iot-status` | Estado de la red IoT: resumen + inventario normalizado (Adapter) |
+
+**Diagrama UML:**
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│                          «Facade»                                │
+│                   EnergyPlatformFacade                           │
+├────────────────────────────────────────────────────────────────┤
+│ - market : MarketService          (Singleton)                   │
+│ - logger : LoggerService          (Singleton)                   │
+│ - config : ConfigService          (Singleton)                   │
+│ - predictors : PredictorFactory   (Factory Method)              │
+│ - devices : DeviceMonitorService  (Adapter)                     │
+│ - settlements : SettlementService (Bridge)                      │
+│ - pricing : OfferPricingService   (Decorator)                   │
+│ - bundles : BundleService         (Composite)                   │
+├────────────────────────────────────────────────────────────────┤
+│ + getDashboard() : array                                           │
+│ + publishSurplus(array) : array                                    │
+│ + buyEnergy(int, float, str, str) : array                          │
+│ + getSurplusAdvice(float, float) : array                           │
+│ + getIoTNetworkStatus() : array                                    │
+└──────┬─────────┬─────────┬─────────┬─────────┬──────────────────┘
+       │         │         │         │         │  coordina
+       ▼         ▼         ▼         ▼         ▼
+ ┌──────────┐┌──────────┐┌──────────┐┌──────────┐┌──────────────┐
+ │ Market   ││ Logger   ││ Device   ││Settlement││ Predictor    │
+ │ Service  ││ Service  ││ Monitor  ││ Service  ││ Factory +    │
+ │(Singleton)││(Singleton)│ │(Adapter) ││ (Bridge) ││ AbstractPred.│
+ └──────────┘└──────────┘└──────────┘└──────────┘└──────────────┘
+       │         │                                     (también
+       │         │                                      Decorator,
+       │         │                                      Composite y
+       │         │                                      ConfigService)
+       │         └──────────┐
+       ▼                    ▼
+┌────────────────────────────────────────────────────────────────┐
+│ «Client»  EnergyController                                       │
+├────────────────────────────────────────────────────────────────┤
+│ GET  /api/energy/platform/dashboard                             │
+│ POST /api/energy/platform/publish-surplus                       │
+│ POST /api/energy/platform/buy                                   │
+│ GET  /api/energy/platform/advice                                │
+│ GET  /api/energy/platform/iot-status                            │
+│ El controlador conoce SOLO al Facade, no a los subsistemas.    │
+└────────────────────────────────────────────────────────────────┘
+```
+
+**Código completo del Facade** (`EnergyPlatformFacade.php`):
+
+```php
+<?php
+
+namespace App\Patterns\Facades;
+
+use App\Models\EnergyOffer;
+use App\Patterns\Adapters\DeviceGatewayRegistry;
+use App\Patterns\Adapters\DeviceMonitorService;
+use App\Patterns\Bridges\SettlementService;
+use App\Patterns\Composite\BundleService;
+use App\Patterns\ConfigService;
+use App\Patterns\Decorators\OfferPricingService;
+use App\Patterns\Factories\PredictorFactory;
+use App\Patterns\LoggerService;
+use App\Patterns\MarketService;
+use App\Patterns\Predictors\AbstractPredictor;
+
+/**
+ * Patron Facade.
+ *
+ * Proporciona una interfaz simplificada y unificada a los subsistemas
+ * de la plataforma (mercado de excedentes, prediccion, dispositivos IoT,
+ * liquidaciones, extras y paquetes de energia).
+ *
+ * El controlador y el frontend ya NO necesitan conocer cada servicio
+ * interno (Singleton, Adapter, Bridge, Decorator, Composite, Factory
+ * Method): el Facade es el unico punto de entrada y coordina todo.
+ */
+class EnergyPlatformFacade
+{
+    private MarketService $market;
+    private LoggerService $logger;
+    private ConfigService $config;
+    private PredictorFactory $predictors;
+    private DeviceMonitorService $devices;
+    private SettlementService $settlements;
+    private OfferPricingService $pricing;
+    private BundleService $bundles;
+
+    public function __construct()
+    {
+        // El Facade es el unico modulo que conoce a todos los
+        // subsistemas internos y sus dependencias.
+        $this->market = MarketService::getInstance();
+        $this->logger = LoggerService::getInstance();
+        $this->config = ConfigService::getInstance();
+        $this->predictors = new PredictorFactory();
+
+        $this->devices = new DeviceMonitorService((new DeviceGatewayRegistry())->all());
+        $this->settlements = new SettlementService();
+        $this->pricing = new OfferPricingService();
+        $this->bundles = new BundleService();
+    }
+
+    /**
+     * Panel unificado de la plataforma: UNA sola llamada agrega el
+     * estado del mercado, las ofertas disponibles, la red IoT, la
+     * configuracion global y la actividad reciente.
+     */
+    public function getDashboard(): array
+    {
+        return [
+            'market' => $this->market->getMarketContext(),
+            'offers' => array_map(
+                fn(EnergyOffer $offer) => $offer->toArray(),
+                $this->market->getAvailableOffers()
+            ),
+            'iot' => $this->devices->getSummary(),
+            'config' => $this->config->getAll(),
+            'activity' => $this->logger->getMetrics(),
+        ];
+    }
+
+    /**
+     * Publicar un excedente: construye la oferta (Builder), la registra
+     * en el mercado, contabiliza la oferta y lo deja en el log.
+     * El cliente envia los datos; el Facade orquesta el resto.
+     */
+    public function publishSurplus(array $data): array
+    {
+        $offer = $this->market->registerOffer($data);
+
+        $this->logger->incrementOffers();
+        $this->logger->log("Oferta creada por {$offer->producerName} ({$offer->energyType}) via Facade");
+
+        return [
+            'offer' => $offer->toArray(),
+            'market' => $this->market->getMarketContext(),
+        ];
+    }
+
+    /**
+     * Comprar energia: ejecuta la compra en el mercado y, en la misma
+     * operacion, emite la liquidacion (Bridge) de la energia adquirida
+     * segun el perfil y la moneda solicitados.
+     */
+    public function buyEnergy(int $offerId, float $kwh, string $profile = 'residential', string $currency = 'COP'): array
+    {
+        $purchase = $this->market->purchaseOffer($offerId, (int) round($kwh));
+
+        if (!($purchase['success'] ?? false)) {
+            return [
+                'success' => false,
+                'message' => $purchase['message'] ?? 'Compra fallida',
+            ];
+        }
+
+        $this->logger->incrementTransactions();
+        $this->logger->log("Compra de {$kwh} KWh en oferta #{$offerId} via Facade");
+
+        // Liquidacion de la energia adquirida (Bridge) en la misma operacion.
+        $offer = $this->market->getOfferById($offerId);
+        $bill = $this->settlements->quote($profile, $currency, [
+            'kwh' => $kwh,
+            'pricePerKwh' => $offer?->pricePerKwh ?? 0.0,
+        ]);
+
+        return [
+            'success' => true,
+            'message' => $purchase['message'],
+            'purchase' => [
+                'offerId' => $offerId,
+                'kwh' => $kwh,
+                'pricePerKwh' => $offer?->pricePerKwh ?? 0.0,
+            ],
+            'bill' => $bill,
+            'market' => $this->market->getMarketContext(),
+        ];
+    }
+
+    /**
+     * Asesoria de excedente: genera las predicciones (Abstract Method)
+     * ligadas al estado real del mercado y resume la accion sugerida.
+     */
+    public function getSurplusAdvice(float $production, float $consumption): array
+    {
+        $marketContext = $this->market->getMarketContext();
+
+        $predictions = array_map(
+            fn(AbstractPredictor $predictor) => $predictor->predict(),
+            $this->predictors->createAll($production, $consumption, $marketContext)
+        );
+
+        return [
+            'predictions' => $predictions,
+            'market' => $marketContext,
+            'advice' => $this->buildAdvice($predictions, $marketContext),
+        ];
+    }
+
+    /**
+     * Estado de la red IoT: inventario normalizado (Adapter) y resumen
+     * consolidado de la red domestica.
+     */
+    public function getIoTNetworkStatus(): array
+    {
+        return [
+            'summary' => $this->devices->getSummary(),
+            'devices' => $this->devices->listDevices(),
+        ];
+    }
+
+    /**
+     * Resumen accionable de la prediccion diaria para apoyar la
+     * toma de decisiones (objetivo especifico de prediccion).
+     */
+    private function buildAdvice(array $predictions, array $marketContext): string
+    {
+        $daily = $predictions[0] ?? null;
+
+        if ($daily === null) {
+            return 'No hay datos suficientes para emitir una recomendacion.';
+        }
+
+        $available = $marketContext['totalAvailableKwh'] ?? 0;
+        $activeOffers = $marketContext['activeOffers'] ?? 0;
+        $avgPrice = $marketContext['avgPricePerKwh'] ?? 0;
+
+        return match ($daily['action'] ?? 'none') {
+            'publish' => "VENDER: publica el excedente estimado de {$daily['surplusEstimate']} kWh; el mercado promedia {$avgPrice} COP/kWh en {$activeOffers} ofertas activas.",
+            'buy' => "COMPRAR: cubre el deficit estimado de {$daily['deficitEstimate']} kWh; el mercado dispone de {$available} kWh en {$activeOffers} ofertas activas.",
+            default => 'EQUILIBRADO: tu produccion estimada cubre tu consumo; no necesitas comprar ni vender.',
+        };
+    }
+}
+```
+
+**Uso en `EnergyController`** (el controlador conoce solo al Facade):
+
+```php
+// Patron Facade: interfaz unificada a todos los subsistemas.
+$this->platform = new EnergyPlatformFacade();
+
+public function getPlatformDashboard(): JsonResponse
+{
+    // UNA sola llamada agrega mercado, ofertas, red IoT,
+    // configuracion y actividad.
+    return response()->json($this->platform->getDashboard());
+}
+
+public function buyEnergy(Request $request): JsonResponse
+{
+    $data = $request->validate([
+        'offerId' => 'required|integer',
+        'kwh' => 'required|numeric|min:0.1',
+        'profile' => 'nullable|string|in:residential,commercial',
+        'currency' => 'nullable|string|in:COP,USD,EUR',
+    ]);
+
+    // Compra en el mercado + liquidacion (Bridge), todo en una sola llamada.
+    $result = $this->platform->buyEnergy(
+        (int) $data['offerId'],
+        (float) $data['kwh'],
+        $data['profile'] ?? 'residential',
+        $data['currency'] ?? 'COP',
+    );
+
+    return response()->json($result, $result['success'] ? 200 : 422);
+}
+```
+
+**Ejemplo de respuesta del panel unificado** (una sola petición):
+
+```json
+{
+  "market": {
+    "totalOffers": 5,
+    "activeOffers": 5,
+    "totalAvailableKwh": 170,
+    "avgPricePerKwh": 10900,
+    "transactionCount": 1
+  },
+  "offers": [
+    { "id": 1, "producerName": "Juan Perez", "totalKwh": 15, "availableKwh": 10, "pricePerKwh": 500, "energyType": "solar" }
+  ],
+  "iot": {
+    "totalDevices": 4,
+    "onlineDevices": 3,
+    "offlineDevices": 1,
+    "totalPowerKw": 2.021,
+    "totalEnergyKwh": 1288.71,
+    "devicesByProvider": { "legacy-scada": 2, "pv-inverter": 2 }
+  },
+  "config": {
+    "marketName": "Plataforma de Comercio de Energia",
+    "defaultPricePerKwh": 500,
+    "currency": "COP",
+    "maxOfferKwh": 1000
+  },
+  "activity": {
+    "totalLogs": 12,
+    "transactionCount": 1,
+    "offerCount": 5,
+    "recentLogs": ["[2026-10-10 12:00:00] Oferta creada por Juan Perez (solar) via Facade"]
+  }
+}
+```
+
+**Ejemplo de compra con liquidación incluida** (`POST /api/energy/platform/buy`):
+
+```json
+{
+  "success": true,
+  "message": "Compra exitosa de 5 KWh",
+  "purchase": { "offerId": 1, "kwh": 5, "pricePerKwh": 500 },
+  "bill": {
+    "profile": "residential",
+    "currency": "COP",
+    "adjustments": [{ "label": "Subsidio residencial (5%)", "amount": -125 }],
+    "total": 2375,
+    "totalFormatted": "$ 2.375 COP",
+    "totalMinorUnits": 2375
+  },
+  "market": { "totalOffers": 5, "activeOffers": 5, "totalAvailableKwh": 165, "avgPricePerKwh": 10900, "transactionCount": 2 }
+}
+```
+
+---
+
+## 22. `PlatformFacade` — Frontend
+
+**Archivo:** `frontend/src/patterns/facade/PlatformFacade.ts`
+
+**En qué consiste dentro del proyecto:** `PlatformFacade` es el Facade del navegador. Expone las mismas cinco operaciones de negocio de alto nivel y, internamente, **delega la comunicación HTTP en `EnergyApiService`** (el cliente Singleton que ya usa toda la aplicación), por lo que se reutiliza el mismo cliente y la misma URL base. Los componentes de React ya **no** construyen peticiones ni conocen los endpoints: piden operaciones de negocio al Facade.
+
+El componente **`PlatformPanel` está ligado al sistema** y es su cliente: al montarse pide `loadDashboard()` (una sola petición que trae mercado, ofertas, red IoT, configuración y actividad), permite **publicar un excedente** (`publishSurplus`), **comprar energía** (`buyEnergy`, que además devuelve la liquidación en la moneda y el perfil elegidos) y **obtener la asesoría de excedente** (`getSurplusAdvice`, con predicciones diaria y semanal ligadas al mercado real). Tras cada operación el panel y el dashboard se refrescan automáticamente.
+
+**Diagrama UML:**
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│                          «Facade»                                │
+│                       PlatformFacade                             │
+├────────────────────────────────────────────────────────────────┤
+│ - api : EnergyApiService  (Singleton — cliente HTTP)            │
+├────────────────────────────────────────────────────────────────┤
+│ + loadDashboard() : Promise<PlatformDashboard>                   │
+│ + publishSurplus(data) : Promise<{offer, market}>                │
+│ + buyEnergy(id, kwh, profile, currency) : Promise<BuyResult>     │
+│ + getSurplusAdvice(production, consumption) : Promise            │
+│ + getIoTNetworkStatus() : Promise                                │
+└───────────────────────────┬────────────────────────────────────┘
+                            │  delega (misma instancia Singleton)
+                            ▼
+┌────────────────────────────────────────────────────────────────┐
+│ «Subsistema»  EnergyApiService (Singleton)                       │
+├────────────────────────────────────────────────────────────────┤
+│ GET  /energy/platform/dashboard                                 │
+│ POST /energy/platform/publish-surplus                           │
+│ POST /energy/platform/buy                                       │
+│ GET  /energy/platform/advice                                    │
+│ GET  /energy/platform/iot-status                                │
+└────────────────────────────────────────────────────────────────┘
+                            ▲
+                            │  usa SOLO al Facade
+┌────────────────────────────────────────────────────────────────┐
+│ «Client»  PlatformPanel (React)                                  │
+├────────────────────────────────────────────────────────────────┤
+│  • Panel unificado con UNA sola peticion                        │
+│  • Publicar excedente · Comprar energia · Asesoria              │
+│  • No conoce endpoints ni servicios internos                    │
+└────────────────────────────────────────────────────────────────┘
+```
+
+**Código completo del Facade** (`PlatformFacade.ts`):
+
+```typescript
+import EnergyApiService from '../singleton/energy-api.service';
+import type {
+  BuyResult,
+  DeviceInfo,
+  EnergyOffer,
+  PlatformDashboard,
+  SettlementBill,
+  SurplusAdvice,
+  TelemetrySummary,
+} from '../singleton/energy-api.service';
+import type { MarketContext } from '../template/Predictor';
+
+// Re-exporta los tipos de respuesta para los componentes.
+export type {
+  BuyResult,
+  PlatformDashboard,
+  SettlementBill,
+  SurplusAdvice,
+};
+
+class PlatformFacade {
+  private api = EnergyApiService.getInstance();
+
+  /** Panel unificado: mercado, ofertas, red IoT, configuracion y actividad. */
+  loadDashboard(): Promise<PlatformDashboard> {
+    return this.api.getPlatformDashboard();
+  }
+
+  /** Publica un excedente: lo construye, registra y contabiliza. */
+  publishSurplus(data: {
+    producerName: string;
+    totalKwh: number;
+    pricePerKwh: number;
+    energyType?: string;
+    description?: string;
+  }): Promise<{ offer: EnergyOffer; market: MarketContext }> {
+    return this.api.publishSurplus(data);
+  }
+
+  /** Compra energia: compra en el mercado + liquidacion (Bridge). */
+  buyEnergy(
+    offerId: number,
+    kwh: number,
+    profile = 'residential',
+    currency = 'COP'
+  ): Promise<BuyResult> {
+    return this.api.buyEnergy(offerId, kwh, profile, currency);
+  }
+
+  /** Asesoria de excedente: predicciones + mercado + recomendacion. */
+  getSurplusAdvice(production = 0, consumption = 0): Promise<SurplusAdvice> {
+    return this.api.getSurplusAdvice(production, consumption);
+  }
+
+  /** Estado de la red IoT: resumen + inventario normalizado (Adapter). */
+  getIoTNetworkStatus(): Promise<{ summary: TelemetrySummary; devices: DeviceInfo[] }> {
+    return this.api.getIoTNetworkStatus();
+  }
+}
+
+// Se exporta una unica instancia compartida por los componentes.
+const platformFacade = new PlatformFacade();
+export default platformFacade;
+```
+
+**Métodos delegados en `EnergyApiService`** (el Facade no hace `fetch` directo; reutiliza el cliente Singleton):
+
+```typescript
+// EnergyApiService (Singleton) — subsistema HTTP del Facade
+async getPlatformDashboard(): Promise<PlatformDashboard> {
+  const response = await fetch(`${this.baseUrl}/energy/platform/dashboard`);
+  if (!response.ok) throw new Error('Error al cargar el panel unificado');
+  return response.json();
+}
+
+async buyEnergy(offerId: number, kwh: number, profile = 'residential', currency = 'COP'): Promise<BuyResult> {
+  const response = await fetch(`${this.baseUrl}/energy/platform/buy`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ offerId, kwh, profile, currency }),
+  });
+  if (!response.ok) throw new Error('Error al comprar energia');
+  return response.json();
+}
+```
+
+**Uso ligado al sistema en `PlatformPanel` (React):**
+
+```tsx
+// El componente es el CLIENTE del Facade: no conoce endpoints.
+import platformFacade from '../patterns/facade/PlatformFacade';
+
+// UNA sola llamada trae todo el panel (mercado + IoT + config + actividad)
+const loadDashboard = useCallback(async () => {
+  setDashboard(await platformFacade.loadDashboard());
+}, []);
+useEffect(() => { loadDashboard(); }, [loadDashboard]);
+
+// Publicar excedente: el Facade construye, registra y contabiliza
+const handlePublish = async () => {
+  const result = await platformFacade.publishSurplus({
+    producerName: producerName.trim(),
+    totalKwh: parseFloat(kwh),
+    pricePerKwh: parseFloat(price),
+    energyType,
+    description: description.trim(),
+  });
+  setMessage(`Oferta #${result.offer.id} de ${result.offer.energyType} publicada via Facade.`);
+  onSystemChanged?.();        // refresca el dashboard global
+  await loadDashboard();      // refresca el panel unificado
+};
+
+// Comprar energia: el Facade compra y liquida (Bridge) en la misma operacion
+const handleBuy = async () => {
+  const result = await platformFacade.buyEnergy(selectedOfferId, parseFloat(buyKwh), profile, currency);
+  setLastBuy(result);
+  setMessage(result.message);
+  // result.bill.totalFormatted -> "$ 2.375 COP" (liquidacion incluida)
+  onSystemChanged?.();
+  await loadDashboard();
+};
+
+// Asesoria de excedente: predicciones + mercado + recomendacion accionable
+const handleAdvice = async () => {
+  const result = await platformFacade.getSurplusAdvice(
+    parseFloat(production) || 0,
+    parseFloat(consumption) || 0
+  );
+  setAdvice(result);
+  // result.advice -> "VENDER: publica el excedente estimado de 8 kWh; ..."
+};
+```
+
+---
+
 # Guía de Ejecución
 
 ## Backend (Laravel)
@@ -3603,6 +4159,11 @@ El frontend corre en `http://localhost:5173`.
 | POST | `/api/energy/offers/quote-extras` | Cotizar una oferta envolviendo `BasicOffer` con decoradores (Decorator) |
 | GET | `/api/energy/bundles/sample` | Ver el árbol de paquetes de ejemplo con totales recursivos (Composite) |
 | POST | `/api/energy/bundles/evaluate` | Evaluar un árbol JSON de paquetes/ofertas (Composite) |
+| GET | `/api/energy/platform/dashboard` | Panel unificado: mercado + ofertas + red IoT + configuración + actividad en una sola llamada (Facade) |
+| POST | `/api/energy/platform/publish-surplus` | Publicar un excedente: lo construye, registra y contabiliza (Facade) |
+| POST | `/api/energy/platform/buy` | Comprar energía y emitir su liquidación en la misma operación (Facade) |
+| GET | `/api/energy/platform/advice` | Asesoría de excedente: predicciones + mercado + recomendación (Facade). Acepta `?production=&consumption=` |
+| GET | `/api/energy/platform/iot-status` | Estado de la red IoT: resumen + inventario normalizado (Facade) |
 
 ## Ejemplo de Request
 
@@ -3702,6 +4263,26 @@ curl http://localhost:8000/api/energy/bundles/sample
 curl -X POST http://localhost:8000/api/energy/bundles/evaluate \
   -H "Content-Type: application/json" \
   -d '{"type": "bundle", "name": "Mi paquete", "children": [{"type": "offer", "name": "Solar techo", "kwh": 10, "pricePerKwh": 500}, {"type": "offer", "name": "Eolica finca", "kwh": 8, "pricePerKwh": 450}]}'
+
+# Panel unificado de la plataforma (Facade: mercado + ofertas + IoT +
+# configuracion + actividad en UNA sola llamada)
+curl http://localhost:8000/api/energy/platform/dashboard
+
+# Publicar un excedente (Facade: Builder + registro + conteo + log)
+curl -X POST http://localhost:8000/api/energy/platform/publish-surplus \
+  -H "Content-Type: application/json" \
+  -d '{"producerName": "Juan Perez", "totalKwh": 15, "pricePerKwh": 500, "energyType": "solar", "description": "Excedente de paneles solares"}'
+
+# Comprar energia Y recibir su liquidacion (Facade: compra + Bridge)
+curl -X POST http://localhost:8000/api/energy/platform/buy \
+  -H "Content-Type: application/json" \
+  -d '{"offerId": 1, "kwh": 5, "profile": "residential", "currency": "COP"}'
+
+# Asesoria de excedente (Facade: prediccion + mercado + recomendacion)
+curl "http://localhost:8000/api/energy/platform/advice?production=30&consumption=50"
+
+# Estado de la red IoT (Facade: Adapter normalizado + resumen)
+curl http://localhost:8000/api/energy/platform/iot-status
 ```
 
 ## Patrones de diseño implementados
@@ -3719,5 +4300,6 @@ Hasta el momento se han implementado y documentado en este README los siguientes
 | 7 | **Bridge** | `EnergyBill` (`ResidentialBill` / `CommercialBill`) + `CurrencyBridge` (`CopCurrency` / `UsdCurrency` / `EurCurrency`) (PHP y TS) |
 | 8 | **Decorator** | `BasicOffer` + `GreenCertificationDecorator` / `InsuranceDecorator` / `PriorityDeliveryDecorator` + `OfferPricingService` (PHP y TS) |
 | 9 | **Composite** | `EnergyBundle` (compuesto) + `OfferLeaf` (hoja) + `BundleService` (PHP y TS) |
+| 10 | **Facade** | `EnergyPlatformFacade` (PHP) + `PlatformFacade` (TS) delegando en `EnergyApiService` |
 
 *Próximamente se implementará el siguiente patrón de diseño...*
