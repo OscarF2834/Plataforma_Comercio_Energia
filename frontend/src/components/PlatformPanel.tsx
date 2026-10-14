@@ -129,14 +129,15 @@ export default function PlatformPanel({
   const selectedOffer = offers.find((offer) => offer.id === selectedOfferId);
 
   return (
-    <div style={styles.card}>
-      <h2 style={styles.title}>Plataforma unificada (Facade)</h2>
+    <div className="panel" style={styles.card}>
+      <h2 style={styles.title}>Resumen de tu actividad energética</h2>
       <p style={styles.subtitle}>
-        Una sola clase (<code>PlatformFacade</code>) coordina todos los subsistemas. Este
-        panel solo pide operaciones de negocio: <code>loadDashboard</code>,{' '}
-        <code>publishSurplus</code>, <code>buyEnergy</code>, <code>getSurplusAdvice</code>{' '}
-        y <code>getIoTNetworkStatus</code>.
+        Consulta el estado del mercado, tus dispositivos y las operaciones recientes desde un mismo lugar.
       </p>
+      <details className="technical-note">
+        <summary>Acerca de este resumen</summary>
+        <p>Esta vista reúne la información del mercado, los dispositivos conectados y la actividad reciente.</p>
+      </details>
 
       {loading && <p style={styles.muted}>Cargando panel unificado...</p>}
       {error && <p style={styles.error}>{error}</p>}
@@ -153,7 +154,7 @@ export default function PlatformPanel({
           </div>
 
           <div style={styles.statCard}>
-            <h3 style={styles.sectionTitle}>Red IoT (Adapter)</h3>
+            <h3 style={styles.sectionTitle}>Dispositivos conectados</h3>
             <p style={styles.stat}>Dispositivos: <strong>{dashboard.iot.totalDevices}</strong> ({dashboard.iot.onlineDevices} en linea)</p>
             <p style={styles.stat}>Potencia total: <strong>{dashboard.iot.totalPowerKw} kW</strong></p>
             <p style={styles.stat}>Energia medida: <strong>{dashboard.iot.totalEnergyKwh} kWh</strong></p>
@@ -163,7 +164,7 @@ export default function PlatformPanel({
           </div>
 
           <div style={styles.statCard}>
-            <h3 style={styles.sectionTitle}>Actividad (Logger)</h3>
+            <h3 style={styles.sectionTitle}>Actividad reciente</h3>
             <p style={styles.stat}>Ofertas publicadas: <strong>{dashboard.activity.offerCount}</strong></p>
             <p style={styles.stat}>Transacciones: <strong>{dashboard.activity.transactionCount}</strong></p>
             <p style={styles.stat}>Logs registrados: <strong>{dashboard.activity.totalLogs}</strong></p>
@@ -179,87 +180,114 @@ export default function PlatformPanel({
       <div style={styles.grid}>
         <div style={styles.formCard}>
           <h3 style={styles.sectionTitle}>Publicar excedente</h3>
-          <input
-            style={styles.input}
-            placeholder="Nombre del productor"
-            value={producerName}
-            onChange={(e) => setProducerName(e.target.value)}
-          />
+          <label className="form-field">
+            Nombre del productor
+            <input
+              style={styles.input}
+              placeholder="Ej.: Comunidad Solar"
+              value={producerName}
+              onChange={(e) => setProducerName(e.target.value)}
+            />
+          </label>
           <div style={styles.row}>
-            <input
-              style={styles.input}
-              type="number"
-              min="1"
-              placeholder="kWh"
-              value={kwh}
-              onChange={(e) => setKwh(e.target.value)}
-            />
-            <input
-              style={styles.input}
-              type="number"
-              min="0"
-              placeholder="Precio por kWh"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-            />
-            <select style={styles.select} value={energyType} onChange={(e) => setEnergyType(e.target.value)}>
-              <option value="solar">solar</option>
-              <option value="wind">wind</option>
-              <option value="hydro">hydro</option>
-            </select>
+            <label className="form-field">
+              Cantidad disponible (kWh)
+              <input
+                style={styles.input}
+                type="number"
+                min="1"
+                placeholder="Ej.: 20"
+                value={kwh}
+                onChange={(e) => setKwh(e.target.value)}
+              />
+            </label>
+            <label className="form-field">
+              Precio por kWh (COP)
+              <input
+                style={styles.input}
+                type="number"
+                min="0"
+                placeholder="Ej.: 500"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+              />
+            </label>
+            <label className="form-field">
+              Fuente de energía
+              <select style={styles.select} value={energyType} onChange={(e) => setEnergyType(e.target.value)}>
+                <option value="solar">Solar</option>
+                <option value="wind">Eólica</option>
+                <option value="hydro">Hidráulica</option>
+              </select>
+            </label>
           </div>
-          <input
-            style={styles.input}
-            placeholder="Descripcion (opcional)"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
+          <label className="form-field">
+            Descripción (opcional)
+            <input
+              style={styles.input}
+              placeholder="Cuéntales algo sobre tu energía"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </label>
           <button style={styles.button} onClick={handlePublish}>
-            Publicar via Facade
+            Publicar oferta
           </button>
         </div>
 
         <div style={styles.formCard}>
-          <h3 style={styles.sectionTitle}>Comprar energia</h3>
-          <select
-            style={styles.select}
-            value={selectedOfferId ?? ''}
-            onChange={(e) => setSelectedOfferId(e.target.value === '' ? null : Number(e.target.value))}
-          >
-            <option value="">Selecciona una oferta</option>
-            {offers.map((offer) => (
-              <option key={offer.id} value={offer.id}>
-                #{offer.id} · {offer.producerName} · {offer.availableKwh} kWh · {offer.pricePerKwh} COP/kWh
-              </option>
-            ))}
-          </select>
+          <h3 style={styles.sectionTitle}>Comprar energía</h3>
+          <label className="form-field">
+            Oferta disponible
+            <select
+              style={styles.select}
+              value={selectedOfferId ?? ''}
+              onChange={(e) => setSelectedOfferId(e.target.value === '' ? null : Number(e.target.value))}
+            >
+              <option value="">Selecciona una oferta</option>
+              {offers.map((offer) => (
+                <option key={offer.id} value={offer.id}>
+                  #{offer.id} · {offer.producerName} · {offer.availableKwh} kWh · {offer.pricePerKwh} COP/kWh
+                </option>
+              ))}
+            </select>
+          </label>
           {selectedOffer && (
             <p style={styles.muted}>
               Disponible: {selectedOffer.availableKwh} kWh de {selectedOffer.producerName}
             </p>
           )}
           <div style={styles.row}>
-            <input
-              style={styles.input}
-              type="number"
-              min="0.1"
-              step="0.1"
-              placeholder="kWh a comprar"
-              value={buyKwh}
-              onChange={(e) => setBuyKwh(e.target.value)}
-            />
-            <select style={styles.select} value={profile} onChange={(e) => setProfile(e.target.value)}>
-              <option value="residential">residential</option>
-              <option value="commercial">commercial</option>
-            </select>
-            <select style={styles.select} value={currency} onChange={(e) => setCurrency(e.target.value)}>
-              <option value="COP">COP</option>
-              <option value="USD">USD</option>
-              <option value="EUR">EUR</option>
-            </select>
+            <label className="form-field">
+              Cantidad que quieres comprar (kWh)
+              <input
+                style={styles.input}
+                type="number"
+                min="0.1"
+                step="0.1"
+                placeholder="Ej.: 10"
+                value={buyKwh}
+                onChange={(e) => setBuyKwh(e.target.value)}
+              />
+            </label>
+            <label className="form-field">
+              Tipo de cliente
+              <select style={styles.select} value={profile} onChange={(e) => setProfile(e.target.value)}>
+                <option value="residential">Hogar</option>
+                <option value="commercial">Comercio</option>
+              </select>
+            </label>
+            <label className="form-field">
+              Moneda
+              <select style={styles.select} value={currency} onChange={(e) => setCurrency(e.target.value)}>
+                <option value="COP">COP · Peso colombiano</option>
+                <option value="USD">USD · Dólar</option>
+                <option value="EUR">EUR · Euro</option>
+              </select>
+            </label>
           </div>
           <button style={styles.button} onClick={handleBuy}>
-            Comprar via Facade
+            Confirmar compra
           </button>
           {lastBuy?.bill && (
             <p style={styles.muted}>
@@ -271,26 +299,32 @@ export default function PlatformPanel({
       </div>
 
       <div style={styles.formCard}>
-        <h3 style={styles.sectionTitle}>Asesoria de excedente (prediccion + mercado)</h3>
+        <h3 style={styles.sectionTitle}>¿Tendrás energía de sobra?</h3>
         <div style={styles.row}>
-          <input
-            style={styles.input}
-            type="number"
-            min="0"
-            placeholder="Produccion (kWh)"
-            value={production}
-            onChange={(e) => setProduction(e.target.value)}
-          />
-          <input
-            style={styles.input}
-            type="number"
-            min="0"
-            placeholder="Consumo (kWh)"
-            value={consumption}
-            onChange={(e) => setConsumption(e.target.value)}
-          />
+          <label className="form-field">
+            Tu producción (kWh)
+            <input
+              style={styles.input}
+              type="number"
+              min="0"
+              placeholder="Ej.: 20"
+              value={production}
+              onChange={(e) => setProduction(e.target.value)}
+            />
+          </label>
+          <label className="form-field">
+            Tu consumo (kWh)
+            <input
+              style={styles.input}
+              type="number"
+              min="0"
+              placeholder="Ej.: 12"
+              value={consumption}
+              onChange={(e) => setConsumption(e.target.value)}
+            />
+          </label>
           <button style={styles.button} onClick={handleAdvice}>
-            Obtener asesoria via Facade
+            Consultar mi balance
           </button>
         </div>
         {advice && (

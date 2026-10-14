@@ -3,7 +3,7 @@ import type { EnergySource } from '../types';
 export default function HydroCard({ source }: { source: EnergySource }) {
   return (
     <div style={style}>
-      <div style={{ fontSize: '2rem' }}>💧</div>
+      <img className="energy-source-image" src="/images/hydro-energy.svg" alt="Agua limpia fluyendo entre montañas" />
       <h3 style={titleStyle}>{source.name}</h3>
       <p style={descStyle}>{source.description}</p>
       <p style={tagStyle}>

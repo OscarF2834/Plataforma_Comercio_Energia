@@ -94,21 +94,31 @@ export default function OfferPrototypePanel({
   const template = templates.find((t) => t.energyType === selectedType);
 
   return (
-    <div style={styles.card}>
-      <h2 style={styles.title}>Plantillas de Oferta — Patron Prototype</h2>
+    <div className="panel" style={styles.card}>
+      <h2 style={styles.title}>Empieza con una plantilla</h2>
       <p style={styles.subtitle}>
-        Cada plantilla es un <strong>prototipo de oferta</strong>. Al clonarla se crea una{' '}
-        <strong>copia independiente</strong> (nuevo id, kWh disponibles = total, sin compartir referencia con el
-        original). Se usa en el <strong>Frontend (TypeScript)</strong> al clonar localmente y en el{' '}
-        <strong>Backend (PHP)</strong> al publicar el clon.
+        Elige un modelo, personaliza los datos y publícalo como una oferta nueva.
       </p>
+      <details className="technical-note">
+        <summary>Cómo funcionan las plantillas</summary>
+        <p>Cada plantilla crea una oferta independiente con sus propios datos. La copia de vista previa se genera aquí y la publicación se guarda en el servidor.</p>
+      </details>
 
-      <p style={styles.sourceLabel}>Plantillas registradas en el PrototypeRegistry (backend):</p>
+      <p style={styles.sourceLabel}>Elige el tipo de energía que quieres ofrecer:</p>
       <div style={styles.templateGrid}>
         {templates.map((t) => (
           <div
             key={t.energyType}
             onClick={() => handleSelectTemplate(t.energyType ?? '')}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                handleSelectTemplate(t.energyType ?? '');
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-pressed={t.energyType === selectedType}
             style={{
               ...styles.templateCard,
               ...(t.energyType === selectedType ? styles.templateActive : {}),
@@ -135,7 +145,7 @@ export default function OfferPrototypePanel({
           </p>
           <div style={styles.actions}>
             <button onClick={handleCloneLocal} style={styles.localButton}>
-              Clonar en el frontend (TypeScript)
+              Usar esta plantilla
             </button>
           </div>
 
@@ -186,7 +196,7 @@ export default function OfferPrototypePanel({
                 </label>
               </div>
               <button onClick={handlePublish} disabled={publishing} style={styles.publishButton}>
-                {publishing ? 'Publicando clon...' : 'Publicar clon (Prototype en backend)'}
+                {publishing ? 'Publicando…' : 'Publicar oferta'}
               </button>
             </div>
           )}

@@ -28,7 +28,7 @@ export default function EnergyCatalog({ selectedEnergyType, onSelect }: Props) {
   return (
     <div>
       <p style={styles.label}>
-        Selecciona el tipo de energia (tarjeta creada por la <strong>factory method</strong>):
+        Selecciona una fuente de energía. Puedes cambiar tu elección antes de publicar.
       </p>
       {loading && <p>Cargando catalogo...</p>}
       {error && <p style={styles.error}>{error}</p>}
@@ -42,6 +42,16 @@ export default function EnergyCatalog({ selectedEnergyType, onSelect }: Props) {
                 key={source.type}
                 onClick={() => onSelect(active ? null : source.type)}
                 style={styles.cardButton(active)}
+                className="source-card-select"
+                role="button"
+                tabIndex={0}
+                aria-pressed={active}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    onSelect(active ? null : source.type);
+                  }
+                }}
                 title={active ? 'Clic para deseleccionar' : `Seleccionar ${source.name}`}
               >
                 {active && <span style={styles.check}>Seleccionado</span>}

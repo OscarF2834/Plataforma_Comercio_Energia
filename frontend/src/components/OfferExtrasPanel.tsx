@@ -62,12 +62,11 @@ export default function OfferExtrasPanel() {
     localQuote && backendQuote && Math.abs(localQuote.total - backendQuote.total) < 0.01;
 
   return (
-    <div style={styles.card}>
-      <h2 style={styles.title}>Extras de oferta (Decorator)</h2>
+    <div className="panel" style={styles.card}>
+      <h2 style={styles.title}>Opciones para tu oferta</h2>
       <p style={styles.subtitle}>
-        Una <strong>BasicOffer</strong> se envuelve con decoradores (certificacion, seguro, entrega
-        prioritaria). Cada decorador agrega su extra sin modificar la oferta base: {selected.length}{' '}
-        decorador(es) activos.
+        Añade servicios opcionales y comprueba cómo afectan al precio total: {selected.length}{' '}
+        opción(es) seleccionada(s).
       </p>
 
       <div style={styles.selectors}>

@@ -125,14 +125,18 @@ export default function PredictionPanel({
   const market = predictions[0]?.market;
 
   return (
-    <div style={styles.card}>
-      <h2 style={styles.title}>Prediccion de Produccion y Consumo</h2>
+    <div className="panel" style={styles.card}>
+      <h2 style={styles.title}>Tu balance de energía</h2>
       <p style={styles.subtitle}>
-        Generada por el patron Abstract Method (Template Method) y ligada al estado real del mercado.
+        Indica cuánto produces y consumes para estimar si tendrás energía para compartir o si necesitarás comprar.
       </p>
+      <details className="technical-note">
+        <summary>Cómo se calcula la predicción</summary>
+        <p>La estimación utiliza los datos del mercado actual y puede calcularse aquí o consultarse al servidor.</p>
+      </details>
 
       {market && (
-        <div style={styles.marketBar}>
+        <div className="market-status" style={styles.marketBar}>
           <strong>Estado real del mercado:</strong>
           <span style={styles.marketItem}>{market.activeOffers} ofertas activas</span>
           <span style={styles.marketItem}>{market.totalAvailableKwh} kWh disponibles</span>
@@ -143,7 +147,7 @@ export default function PredictionPanel({
 
       <div style={styles.form}>
         <label style={styles.label}>
-          Mi produccion (kWh):
+          Mi producción (kWh):
           <input
             type="number"
             min="0"
@@ -164,10 +168,10 @@ export default function PredictionPanel({
         </label>
         <div style={styles.actions}>
           <button onClick={handleLocal} style={styles.secondaryButton}>
-            Calcular local
+            Calcular aquí
           </button>
           <button onClick={handleBackend} style={styles.primaryButton} disabled={loading}>
-            {loading ? 'Consultando...' : 'Consultar backend'}
+            {loading ? 'Consultando…' : 'Actualizar desde el servidor'}
           </button>
         </div>
       </div>
@@ -175,7 +179,7 @@ export default function PredictionPanel({
       {error && <p style={styles.error}>{error}</p>}
 
       <p style={styles.sourceLabel}>
-        Resultados computados con el patron: <strong>{lastSource === 'backend' ? 'Backend (PHP)' : 'Frontend (TypeScript)'}</strong>
+        Cálculo realizado en: <strong>{lastSource === 'backend' ? 'el servidor' : 'este dispositivo'}</strong>
       </p>
 
       <div style={styles.grid}>
