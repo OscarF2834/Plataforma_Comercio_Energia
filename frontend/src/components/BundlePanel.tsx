@@ -65,13 +65,15 @@ export default function BundlePanel() {
     tree && backendTree && Math.abs(tree.totalPrice - backendTree.totalPrice) < 0.01;
 
   return (
-    <div style={styles.card}>
-      <h2 style={styles.title}>Paquetes de energia (Composite)</h2>
+    <div className="panel" style={styles.card}>
+      <h2 style={styles.title}>Agrupa ofertas en un paquete</h2>
       <p style={styles.subtitle}>
-        Un paquete (<strong>EnergyBundle</strong>) contiene ofertas (<strong>OfferLeaf</strong>) u
-        otros paquetes. Los totales se calculan recursivamente: {tree?.offerCount ?? 0} ofertas hoja
-        dentro del arbol.
+        Reúne varias ofertas y consulta su cantidad total de energía y su precio combinado.
       </p>
+      <details className="technical-note">
+        <summary>Cómo se calcula el paquete</summary>
+        <p>El total suma la energía y los precios de las ofertas incluidas, incluso si un paquete contiene otros paquetes.</p>
+      </details>
 
       {tree && (
         <div style={styles.treeBox}>
@@ -81,10 +83,10 @@ export default function BundlePanel() {
 
       <div style={styles.actions}>
         <button onClick={handleAddOffer} style={styles.secondaryButton}>
-          + Agregar oferta al paquete raiz
+          Añadir oferta al paquete
         </button>
         <button onClick={handleBackendEvaluate} style={styles.primaryButton}>
-          Evaluar arbol en el backend
+          Comparar cálculo con el servidor
         </button>
       </div>
 

@@ -86,27 +86,29 @@ export default function DevicePanel() {
   }, 0);
 
   return (
-    <div style={styles.card}>
-      <h2 style={styles.title}>Dispositivos IoT del hogar (Adapter)</h2>
+    <div className="panel" style={styles.card}>
+      <h2 style={styles.title}>Estado de tus dispositivos</h2>
       <p style={styles.subtitle}>
-        Cada fabricante habla un idioma distinto. Los <strong>Adapter</strong> traducen registros SCADA
-        y payloads de inversor a una interfaz comun (<code>DeviceGateway</code>) que este panel consume
-        sin saber quien fabrico el dato.
+        Comprueba qué dispositivos están conectados y consulta sus mediciones de energía.
       </p>
+      <details className="technical-note">
+        <summary>Sobre los datos de los dispositivos</summary>
+        <p>Las mediciones se normalizan para que puedas consultarlas aunque los dispositivos sean de distintos fabricantes.</p>
+      </details>
 
       <div style={styles.toolbar}>
-        <span style={styles.toolbarLabel}>Origen de la telemetria:</span>
+        <span style={styles.toolbarLabel}>Consultar datos desde:</span>
         <button
           onClick={() => setSource('frontend')}
           style={styles.sourceButton(source === 'frontend')}
         >
-          Adapter del navegador
+          Este navegador
         </button>
         <button
           onClick={() => setSource('backend')}
           style={styles.sourceButton(source === 'backend')}
         >
-          Adapter del backend
+          El servidor
         </button>
       </div>
 

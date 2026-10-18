@@ -12,11 +12,11 @@ interface Props {
 
 const STEPS = [
   { step: 1, label: 'Productor' },
-  { step: 2, label: 'Tipo energia' },
+  { step: 2, label: 'Fuente' },
   { step: 3, label: 'Cantidad' },
-  { step: 4, label: 'Precio' },
-  { step: 5, label: 'Descripcion' },
-  { step: 6, label: 'Construir' },
+  { step: 4, label: 'Precio opcional' },
+  { step: 5, label: 'Descripción' },
+  { step: 6, label: 'Revisar' },
 ];
 
 export default function CreateOffer({ onOfferCreated, selectedEnergyType, onSelectEnergyType }: Props) {
@@ -33,11 +33,15 @@ export default function CreateOffer({ onOfferCreated, selectedEnergyType, onSele
   const qty = parseFloat(totalKwh);
   const price = parseFloat(pricePerKwh);
 
+  const handleEnergyTypeSelected = (type: string | null) => {
+    onSelectEnergyType?.(type);
+  };
+
   const stepValid: Record<number, boolean> = {
     1: producerName.trim().length > 0,
     2: !!selectedEnergyType,
     3: Number.isFinite(qty) && qty > 0,
-    4: Number.isFinite(price) && price >= 0,
+    4: true,
     5: true,
     6: true,
   };
@@ -62,7 +66,13 @@ export default function CreateOffer({ onOfferCreated, selectedEnergyType, onSele
     });
 
   const handlePublish = async () => {
-    if (!stepValid[1] || !stepValid[2] || !stepValid[3] || !stepValid[4]) {
+    if (
+      !stepValid[1] ||
+      !stepValid[2] ||
+      !stepValid[3] ||
+      !Number.isFinite(price) ||
+      price < 0
+    ) {
       setError('Completa todos los pasos para construir la oferta.');
       return;
     }
@@ -107,31 +117,50 @@ export default function CreateOffer({ onOfferCreated, selectedEnergyType, onSele
   };
 
   return (
-    <div style={styles.card}>
-      <h2 style={styles.title}>Publicar Excedente de Energia</h2>
+    <div className="panel offer-wizard" style={styles.card}>
+      <h2 style={styles.title}>Publica tu energía</h2>
       <p style={styles.subtitle}>
-        La oferta se construye con el patron <strong>Builder</strong> (Director + EnergyOfferBuilder).
+        Cuéntanos qué energía quieres compartir. Te guiaremos paso a paso.
       </p>
 
-      <div style={styles.stepsBar}>
+      <nav className="wizard-steps" aria-label="Pasos para publicar tu energía" style={styles.stepsBar}>
         {STEPS.map((s) => {
           const done = s.step < step;
           const active = s.step === step;
           return (
-            <div key={s.step} style={{ ...styles.stepPill, ...(active ? styles.stepActive : {}), ...(done ? styles.stepDone : {}) }}>
-              {done ? '✓' : s.step}
+            <div
+              key={s.step}
+              aria-current={active ? 'step' : undefined}
+              aria-label={`Paso ${s.step}: ${s.label}${done ? ', completado' : active ? ', actual' : ''}`}
+              style={{ ...styles.stepPill, ...(active ? styles.stepActive : {}), ...(done ? styles.stepDone : {}) }}
+            >
+              <span className="wizard-step-number">{done ? '✓' : s.step}</span>
+              <span className="wizard-step-label">{s.label}</span>
             </div>
           );
         })}
+      </nav>
+      <p className="wizard-current-step" aria-live="polite">
+        Paso {step} de {STEPS.length} · {STEPS[step - 1].label}
+      </p>
+      <div
+        className="wizard-progress"
+        role="progressbar"
+        aria-label="Progreso de publicación"
+        aria-valuemin={1}
+        aria-valuemax={STEPS.length}
+        aria-valuenow={step}
+      >
+        <span style={{ width: `${(step / STEPS.length) * 100}%` }} />
       </div>
 
       <div style={styles.stepContent}>
         {step === 1 && (
           <label style={styles.label}>
-            <strong>Paso 1 · Nombre del productor</strong>
+            <strong>¿Quién publica la oferta?</strong>
             <input
               type="text"
-              placeholder="Ej: Juan Perez"
+              placeholder="Nombre de la persona o comunidad"
               value={producerName}
               onChange={(e) => setProducerName(e.target.value)}
               required
@@ -143,15 +172,15 @@ export default function CreateOffer({ onOfferCreated, selectedEnergyType, onSele
         {step === 2 && (
           <div>
             <p style={styles.label}>
-              <strong>Paso 2 · Tipo de energia (clasificada con Factory Method)</strong>
+              <strong>¿De dónde viene tu energía?</strong>
             </p>
-            <EnergyCatalog selectedEnergyType={selectedEnergyType} onSelect={onSelectEnergyType ?? (() => {})} />
+            <EnergyCatalog selectedEnergyType={selectedEnergyType} onSelect={handleEnergyTypeSelected} />
           </div>
         )}
 
         {step === 3 && (
           <label style={styles.label}>
-            <strong>Paso 3 · Cantidad total (kWh)</strong>
+            <strong>¿Cuánta energía tienes disponible?</strong>
             <input
               type="number"
               placeholder="Ej: 15"
@@ -162,27 +191,30 @@ export default function CreateOffer({ onOfferCreated, selectedEnergyType, onSele
               step="0.1"
               style={styles.input}
             />
+            <span className="field-hint">Indica la cantidad en kilovatios-hora (kWh).</span>
           </label>
         )}
 
         {step === 4 && (
           <label style={styles.label}>
-            <strong>Paso 4 · Precio por kWh (COP)</strong>
+            <strong>¿A qué precio quieres ofrecerla? (opcional)</strong>
             <input
               type="number"
               placeholder="Ej: 500"
               value={pricePerKwh}
               onChange={(e) => setPricePerKwh(e.target.value)}
-              required
               min="1"
               style={styles.input}
             />
+            <span className="field-hint">
+              Precio por cada kWh en pesos colombianos (COP). Puedes dejarlo vacío para elegir el precio sugerido al final.
+            </span>
           </label>
         )}
 
         {step === 5 && (
           <label style={styles.label}>
-            <strong>Paso 5 · Descripcion (opcional)</strong>
+            <strong>Agrega un detalle para quienes compran (opcional)</strong>
             <textarea
               placeholder="Ej: Excedente de paneles solares"
               value={description}
@@ -195,33 +227,37 @@ export default function CreateOffer({ onOfferCreated, selectedEnergyType, onSele
         {step === 6 && (
           <div>
             <p style={styles.label}>
-              <strong>Paso 6 · Construir y publicar la oferta</strong>
+              <strong>Revisa tu oferta antes de publicarla</strong>
             </p>
-            <p style={styles.hint}>
-              El Builder entrega la oferta construida con los datos de los pasos anteriores, o el Director genera la
-              variante <code>buildExpressOffer()</code> con el precio por defecto del mercado.
-            </p>
+            <dl className="offer-review">
+              <div><dt>Publicada por</dt><dd>{producerName}</dd></div>
+              <div><dt>Fuente de energía</dt><dd>{getEnergyTypeName(selectedEnergyType ?? '')}</dd></div>
+              <div><dt>Cantidad disponible</dt><dd>{totalKwh} kWh</dd></div>
+              <div><dt>Precio por kWh</dt><dd>{pricePerKwh ? `$${pricePerKwh} COP` : 'La plataforma calculará un precio sugerido'}</dd></div>
+              {description.trim() && <div><dt>Detalle</dt><dd>{description}</dd></div>}
+            </dl>
+            <p className="field-hint">Podrás volver atrás para cambiar cualquier dato.</p>
             <div style={styles.publishRow}>
               <button
                 onClick={handlePublish}
-                disabled={publishing !== '' || !stepValid[1] || !stepValid[2] || !stepValid[3] || !stepValid[4]}
+                disabled={publishing !== '' || !stepValid[1] || !stepValid[2] || !stepValid[3] || !Number.isFinite(price) || price < 0}
                 style={styles.button}
               >
-                {publishing === 'custom' ? 'Publicando...' : 'Construir y publicar oferta'}
+                {publishing === 'custom' ? 'Publicando...' : 'Publicar con mi precio'}
               </button>
               <button
                 onClick={handlePublishExpress}
                 disabled={publishing !== '' || !stepValid[1] || !stepValid[2] || !stepValid[3]}
                 style={styles.expressButton}
               >
-                {publishing === 'express' ? 'Publicando...' : 'Publicar oferta expres'}
+                {publishing === 'express' ? 'Publicando...' : 'Publicar con precio sugerido'}
               </button>
             </div>
           </div>
         )}
       </div>
 
-      {error && <p style={styles.error}>{error}</p>}
+      {error && <p role="alert" style={styles.error}>{error}</p>}
 
       <div style={styles.navRow}>
         <button onClick={() => setStep((s) => Math.max(1, s - 1))} disabled={step === 1} style={styles.backButton}>
@@ -364,3 +400,16 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '0.9rem',
   },
 };
+
+function getEnergyTypeName(type: string): string {
+  switch (type) {
+    case 'solar':
+      return 'Solar';
+    case 'wind':
+      return 'Eólica';
+    case 'hydro':
+      return 'Hidráulica';
+    default:
+      return type;
+  }
+}

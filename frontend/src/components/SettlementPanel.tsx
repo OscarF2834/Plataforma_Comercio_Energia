@@ -64,17 +64,19 @@ export default function SettlementPanel() {
     localBill && backendBill && Math.abs(localBill.total - backendBill.total) < 0.01;
 
   return (
-    <div style={styles.card}>
-      <h2 style={styles.title}>Liquidaciones (Bridge)</h2>
+    <div className="panel" style={styles.card}>
+      <h2 style={styles.title}>Calcula el total de la operación</h2>
       <p style={styles.subtitle}>
-        El perfil de liquidacion (<strong>abstraccion</strong>) y la moneda (<strong>implementor</strong>)
-        son dos jerarquias independientes: {combinations.length || profiles.length * currencies.length}{' '}
-        combinaciones sin condicionales anidados.
+        Elige el perfil y la moneda para consultar el importe final, con los ajustes e impuestos aplicables.
       </p>
+      <details className="technical-note">
+        <summary>Qué incluye este cálculo</summary>
+        <p>El total se calcula según el perfil, la moneda, los ajustes y los impuestos configurados.</p>
+      </details>
 
       <div style={styles.selectors}>
         <div style={styles.selector}>
-          <label style={styles.label}>Perfil (abstraccion)</label>
+          <label style={styles.label}>Perfil de cliente</label>
           <select value={profile} onChange={(e) => setProfile(e.target.value)} style={styles.select}>
             {profiles.map((p) => (
               <option key={p.key} value={p.key}>
@@ -85,7 +87,7 @@ export default function SettlementPanel() {
         </div>
 
         <div style={styles.selector}>
-          <label style={styles.label}>Moneda (implementor)</label>
+          <label style={styles.label}>Moneda de pago</label>
           <select value={currency} onChange={(e) => setCurrency(e.target.value)} style={styles.select}>
             {currencies.map((c) => (
               <option key={c.code} value={c.code}>
@@ -122,7 +124,7 @@ export default function SettlementPanel() {
 
       <div style={styles.actions}>
         <button onClick={handleEmit} style={styles.primaryButton}>
-          Emitir liquidacion en el backend
+          Calcular total en el servidor
         </button>
       </div>
 
@@ -165,7 +167,7 @@ export default function SettlementPanel() {
               <span style={styles.totalValue}>{localBill.totalFormatted}</span>
             </div>
             <div style={styles.line}>
-              <span style={styles.muted}>Unidades minimas para pasarela de pago</span>
+              <span style={styles.muted}>Unidades mínimas para el pago</span>
               <span style={styles.muted}>{localBill.totalMinorUnits}</span>
             </div>
           </div>
@@ -173,8 +175,8 @@ export default function SettlementPanel() {
           {backendBill && (
             <p style={sameTotal ? styles.matchOk : styles.matchWarn}>
               {sameTotal
-                ? 'El Bridge del backend (PHP) coincide con el calculo del frontend (TypeScript).'
-                : `El backend informo ${backendBill.totalFormatted}.`}
+                ? 'El total coincide con el cálculo del servidor.'
+                : `El servidor calculó ${backendBill.totalFormatted}.`}
             </p>
           )}
         </div>
@@ -182,7 +184,7 @@ export default function SettlementPanel() {
 
       {combinations.length > 0 && (
         <p style={styles.combos}>
-          <strong>Combinaciones soportadas:</strong> {combinations.join(' · ')}
+          <strong>Perfiles y monedas disponibles:</strong> {combinations.join(' · ')}
         </p>
       )}
     </div>
