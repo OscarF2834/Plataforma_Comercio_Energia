@@ -7,7 +7,7 @@ import DevicePanel from './components/DevicePanel';
 import SettlementPanel from './components/SettlementPanel';
 import OfferExtrasPanel from './components/OfferExtrasPanel';
 import BundlePanel from './components/BundlePanel';
-import PlatformPanel from './components/PlatformPanel';
+import PatternsPanel from './components/PatternsPanel';
 
 const heroPhotos = [
   {
@@ -91,6 +91,7 @@ function App() {
           <a href="#liquidaciones">Calcular liquidación</a>
           <a href="#extras">Opciones de oferta</a>
           <a href="#paquetes">Paquetes de energía</a>
+          <a href="#patrones">Flyweight y Proxy</a>
         </nav>
 
         <section className="content-section market-section" id="market" aria-label="Publicación y ofertas de energía">
@@ -130,8 +131,8 @@ function App() {
         <section className="content-section panel-section" id="paquetes">
           <BundlePanel />
         </section>
-        <section className="content-section panel-section" id="plataforma">
-          <PlatformPanel onSystemChanged={handleOfferCreated} />
+        <section className="content-section panel-section" id="patrones">
+          <PatternsPanel onSystemChanged={handleOfferCreated} />
         </section>
       </main>
       <footer className="site-footer">

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import EnergyApiService from '../patterns/singleton/energy-api.service';
+import energyTypeFlyweightFactory from '../patterns/flyweight/EnergyTypeFlyweightFactory';
+import energyApiProxy from '../patterns/proxy/EnergyApiProxy';
 
 interface EnergyOffer {
   id?: number;
@@ -17,7 +18,7 @@ export default function EnergyDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const api = EnergyApiService.getInstance();
+  const api = energyApiProxy;
 
   const fetchOffers = async () => {
     setLoading(true);
@@ -108,12 +109,14 @@ export default function EnergyDashboard() {
             <div key={offer.id} style={styles.offerCard}>
               <img
                 className="offer-image"
-                src={getEnergyImage(offer.energyType)}
-                alt=""
-                loading="lazy"
+                src={energyTypeFlyweightFactory.getImage(offer.energyType)}
+                alt={energyTypeFlyweightFactory.getName(offer.energyType)}
+                onError={(e) => {
+                  e.currentTarget.src = '/images/renewable-landscape.svg';
+                }}
               />
               <div className="offer-card-content">
-              {offer.energyType && <span className="offer-type">{getEnergyTypeName(offer.energyType)}</span>}
+              {offer.energyType && <span className="offer-type">{energyTypeFlyweightFactory.getName(offer.energyType)}</span>}
               <h3 style={styles.offerTitle}>{offer.producerName}</h3>
               <p style={styles.offerDetail}>
                 <strong>{offer.availableKwh}</strong> kWh disponibles
@@ -225,29 +228,3 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '0.95rem',
   },
 };
-
-function getEnergyImage(type?: string): string {
-  switch (type?.toLowerCase()) {
-    case 'solar':
-      return '/images/solar-energy.svg';
-    case 'wind':
-      return '/images/wind-energy.svg';
-    case 'hydro':
-      return '/images/hydro-energy.svg';
-    default:
-      return '/images/renewable-landscape.svg';
-  }
-}
-
-function getEnergyTypeName(type: string): string {
-  switch (type.toLowerCase()) {
-    case 'solar':
-      return 'Energía solar';
-    case 'wind':
-      return 'Energía eólica';
-    case 'hydro':
-      return 'Energía hidráulica';
-    default:
-      return type;
-  }
-}

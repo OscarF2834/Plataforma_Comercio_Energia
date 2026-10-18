@@ -36,6 +36,10 @@ El proyecto está planteado como un **prototipo funcional académico**. No tendr
 - [20. `EnergyBundle` / `OfferLeaf` (Composite — Frontend)](#20-energybundle--offerleaf--bundleservice--frontend)
 - [21. `EnergyPlatformFacade` (Facade — Backend)](#21-energyplatformfacade--backend)
 - [22. `PlatformFacade` (Facade — Frontend)](#22-platformfacade--frontend)
+- [23. `EnergySourceFlyweightFactory` (Flyweight — Backend)](#23-energysourceflyweightfactory--flyweight--backend)
+- [24. `EnergyTypeFlyweightFactory` (Flyweight — Frontend)](#24-energytypeflyweightfactory--flyweight--frontend)
+- [25. `MarketProxy` (Proxy — Backend)](#25-marketproxy--proxy--backend)
+- [26. `EnergyApiProxy` (Proxy — Frontend)](#26-energyapiproxy--proxy--frontend)
 
 ---
 
@@ -4164,6 +4168,8 @@ El frontend corre en `http://localhost:5173`.
 | POST | `/api/energy/platform/buy` | Comprar energía y emitir su liquidación en la misma operación (Facade) |
 | GET | `/api/energy/platform/advice` | Asesoría de excedente: predicciones + mercado + recomendación (Facade). Acepta `?production=&consumption=` |
 | GET | `/api/energy/platform/iot-status` | Estado de la red IoT: resumen + inventario normalizado (Facade) |
+| GET | `/api/energy/flyweight-stats` | Estadísticas del pool Flyweight (PHP): instancias creadas vs usos |
+| GET | `/api/energy/proxy-stats` | Estadísticas del Proxy (PHP): caché válida, TTL, entradas y política de compras |
 
 ## Ejemplo de Request
 
@@ -4283,6 +4289,12 @@ curl "http://localhost:8000/api/energy/platform/advice?production=30&consumption
 
 # Estado de la red IoT (Facade: Adapter normalizado + resumen)
 curl http://localhost:8000/api/energy/platform/iot-status
+
+# Estadisticas de Flyweight (pool compartido de descriptores)
+curl http://localhost:8000/api/energy/flyweight-stats
+
+# Estadisticas de Proxy (cache + proteccion de compras)
+curl http://localhost:8000/api/energy/proxy-stats
 ```
 
 ## Patrones de diseño implementados
@@ -4301,5 +4313,51 @@ Hasta el momento se han implementado y documentado en este README los siguientes
 | 8 | **Decorator** | `BasicOffer` + `GreenCertificationDecorator` / `InsuranceDecorator` / `PriorityDeliveryDecorator` + `OfferPricingService` (PHP y TS) |
 | 9 | **Composite** | `EnergyBundle` (compuesto) + `OfferLeaf` (hoja) + `BundleService` (PHP y TS) |
 | 10 | **Facade** | `EnergyPlatformFacade` (PHP) + `PlatformFacade` (TS) delegando en `EnergyApiService` |
+| 11 | **Flyweight** | `EnergySourceFlyweightFactory` (PHP) + `EnergyTypeFlyweightFactory` (TS) |
+| 12 | **Proxy** | `MarketProxy` (PHP: virtual, caché, protección) + `EnergyApiProxy` (TS: caché TTL + protección) |
+
+## 23. `EnergySourceFlyweightFactory` (Flyweight — Backend)
+
+**Archivo:** `backend-laravel/app/Patterns/Flyweights/EnergySourceFlyweightFactory.php`
+
+**En qué consiste dentro del proyecto:** Singleton que comparte una única instancia de `EnergySource` por tipo (`solar`, `wind`, `hydro`). El estado intrínseco (nombre, descripción, eficiencia, color) se guarda en el pool y se reutiliza; el estado extrínseco (productor, kWh, precio, fecha) vive en `EnergyOffer`. Así, todas las ofertas comparten descriptores.
+
+**Endpoints:** `GET /api/energy/flyweight-stats` (métricas) · `GET /api/energy/offers` ahora enriquece cada oferta con `energySource` (descriptor compartido).
+
+**Diagrama UML (resumen):**
+```
+FlyweightFactory (Singleton) → pool: Map<tipo, EnergySource>  (3 instancias compartidas)
+Ofertas N → usan el mismo descriptor (estado intrínseco compartido)
+```
+
+## 24. `EnergyTypeFlyweightFactory` (Flyweight — Frontend)
+
+**Archivo:** `frontend/src/patterns/flyweight/EnergyTypeFlyweightFactory.ts`
+
+**En qué consiste:** Reutiliza descriptores visuales (emoji, imagen, colores) por tipo. Usado en `EnergyDashboard` y `PatternsPanel`.
+
+## 25. `MarketProxy` (Proxy — Backend)
+
+**Archivo:** `backend-laravel/app/Patterns/Proxies/MarketProxy.php`
+
+**En qué consiste:** Sustituto de `MarketService` con:
+- **Proxy virtual:** crea `MarketService` solo al primer acceso.
+- **Proxy de caché:** cachea `getAvailableOffers()` con TTL (configurable) e invalida la caché al modificar el mercado.
+- **Proxy de protección:** valida compras (mínimo/máximo desde `ConfigService`), bloquea fuera de política antes de llegar al sujeto real.
+
+**Integración:** `EnergyController` usa `MarketProxy` para `getAvailableOffers()` y `purchaseOffer()`.
+
+## 26. `EnergyApiProxy` (Proxy — Frontend)
+
+**Archivo:** `frontend/src/patterns/proxy/EnergyApiProxy.ts`
+
+**En qué consiste:** Envoltorio de `EnergyApiService` con caché TTL de ofertas y validación de compras (1–100 kWh). `EnergyDashboard` lo usa.
+
+## Componente `PatternsPanel`
+
+**Archivo:** `frontend/src/components/PatternsPanel.tsx`
+
+Muestra estadísticas en tiempo real de Flyweight y Proxy (frontend + backend), con estado de caché y política de compras, siguiendo el diseño existente.
+
 
 *Próximamente se implementará el siguiente patrón de diseño...*

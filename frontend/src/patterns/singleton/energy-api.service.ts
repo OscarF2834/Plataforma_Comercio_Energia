@@ -345,6 +345,20 @@ class EnergyApiService {
     if (!response.ok) throw new Error('Error al obtener el estado de la red IoT');
     return response.json();
   }
+
+  /** Estadísticas de Flyweight (pool compartido). */
+  async getFlyweightStats() {
+    const response = await fetch(`${this.baseUrl}/energy/flyweight-stats`);
+    if (!response.ok) throw new Error('Error al obtener estadísticas Flyweight');
+    return response.json();
+  }
+
+  /** Estadísticas de Proxy (caché + protección). */
+  async getProxyStats() {
+    const response = await fetch(`${this.baseUrl}/energy/proxy-stats`);
+    if (!response.ok) throw new Error('Error al obtener estadísticas Proxy');
+    return response.json();
+  }
 }
 
 export default EnergyApiService;

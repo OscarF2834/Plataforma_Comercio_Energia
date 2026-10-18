@@ -13,6 +13,8 @@ use App\Patterns\Decorators\OfferPricingService;
 use App\Patterns\Bridges\SettlementService;
 use App\Patterns\Factories\EnergySourceFactory;
 use App\Patterns\Factories\PredictorFactory;
+use App\Patterns\Flyweights\EnergySourceFlyweightFactory;
+use App\Patterns\Proxies\MarketProxy;
 use App\Patterns\Predictors\AbstractPredictor;
 use App\Patterns\Prototypes\PrototypeRegistry;
 use Illuminate\Http\JsonResponse;
@@ -21,6 +23,8 @@ use Illuminate\Http\Request;
 class EnergyController extends Controller
 {
     private MarketService $market;
+    private MarketProxy $marketProxy;
+    private EnergySourceFlyweightFactory $sourceFlyweights;
     private LoggerService $logger;
     private ConfigService $config;
     private EnergySourceFactory $sourceFactory;
@@ -35,6 +39,14 @@ class EnergyController extends Controller
     public function __construct()
     {
         $this->market = MarketService::getInstance();
+
+        // Patron Proxy: el MarketProxy sustituye al MarketService y controla
+        // el acceso (caché de ofertas + protección de compras).
+        $this->marketProxy = MarketProxy::getInstance();
+
+        // Patron Flyweight: pool compartido de descriptores por tipo de energía.
+        $this->sourceFlyweights = EnergySourceFlyweightFactory::getInstance();
+
         $this->logger = LoggerService::getInstance();
         $this->config = ConfigService::getInstance();
         $this->sourceFactory = new EnergySourceFactory();
@@ -103,10 +115,24 @@ class EnergyController extends Controller
 
     public function getAvailableOffers(): JsonResponse
     {
+        // Patron Proxy: usa el proxy para obtener ofertas (caché + virtual).
         $offers = array_map(
-            fn($o) => $o->toArray(),
-            $this->market->getAvailableOffers()
+            fn ($o) => $o->toArray(),
+            $this->marketProxy->getAvailableOffers()
         );
+
+        // Patron Flyweight: enriquece cada oferta con su descriptor compartido.
+        $offers = array_map(function (array $offer) {
+            $type = $offer['energyType'] ?? '';
+            if ($type === '') {
+                return $offer;
+            }
+
+            return array_merge(
+                $offer,
+                ['energySource' => $this->sourceFlyweights->describe($type)]
+            );
+        }, $offers);
 
         return response()->json($offers);
     }
@@ -115,7 +141,9 @@ class EnergyController extends Controller
     {
         $data = $request->validate(['kwh' => 'required|numeric|min:1']);
 
-        $result = $this->market->purchaseOffer($id, $data['kwh']);
+        // Patron Proxy: el proxy protege la compra (mínimo/máximo) y,
+        // si es exitosa, invalida la caché de ofertas.
+        $result = $this->marketProxy->purchaseOffer($id, (int) round($data['kwh']));
 
         if ($result['success']) {
             $this->logger->incrementTransactions();
@@ -335,16 +363,26 @@ class EnergyController extends Controller
     }
 
     // ------------------------------------------------------------------
-    // Patron Facade: una sola llamada coordina todos los subsistemas.
+    // Patron Flyweight: estadísticas del pool de descriptores de energía.
     // ------------------------------------------------------------------
 
-    public function getPlatformDashboard(): JsonResponse
+    public function getFlyweightStats(): JsonResponse
     {
-        // Patron Facade: el panel unificado agrega mercado, ofertas,
-        // red IoT, configuracion y actividad en UNA sola llamada.
-        $this->logger->log('Consulta del panel unificado de la plataforma (Facade)');
+        $this->logger->log('Consulta de estadísticas del Flyweight (descriptores compartidos por tipo de energia)');
+        return response()->json($this->sourceFlyweights->getStats());
+    }
 
-        return response()->json($this->platform->getDashboard());
+    // ------------------------------------------------------------------
+    // Patron Proxy: estado de la caché y políticas.
+    // ------------------------------------------------------------------
+
+    public function getProxyStats(): JsonResponse
+    {
+        $this->logger->log('Consulta de estadísticas del Proxy (caché y protección de compras)');
+        return response()->json([
+            'cache' => $this->marketProxy->getCacheStatus(),
+            'config' => $this->config->getAll(),
+        ]);
     }
 
     public function publishSurplus(Request $request): JsonResponse

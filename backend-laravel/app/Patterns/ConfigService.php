@@ -11,6 +11,11 @@ class ConfigService
         'defaultPricePerKwh' => 500,
         'currency' => 'COP',
         'maxOfferKwh' => 1000,
+        // Politica usada por el Proxy de protección (MarketProxy).
+        'minPurchaseKwh' => 1,
+        'maxPurchaseKwh' => 100,
+        // TTL (segundos) de la caché del Proxy de caché (MarketProxy).
+        'offersCacheTtl' => 10,
     ];
 
     private function __construct() {}
