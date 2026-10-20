@@ -385,6 +385,11 @@ class EnergyController extends Controller
         ]);
     }
 
+    public function getPlatformDashboard(): JsonResponse
+    {
+        return response()->json($this->platform->getDashboard());
+    }
+
     public function publishSurplus(Request $request): JsonResponse
     {
         $data = $request->validate([

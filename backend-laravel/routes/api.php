@@ -39,4 +39,11 @@ Route::prefix('energy')->group(function () {
 
     // Patron Proxy: estado de caché y políticas de protección.
     Route::get('/proxy-stats', [EnergyController::class, 'getProxyStats']);
+
+    // Patron Facade: operaciones unificadas de la plataforma.
+    Route::get('/platform/dashboard', [EnergyController::class, 'getPlatformDashboard']);
+    Route::post('/platform/publish-surplus', [EnergyController::class, 'publishSurplus']);
+    Route::post('/platform/buy', [EnergyController::class, 'buyEnergy']);
+    Route::get('/platform/advice', [EnergyController::class, 'getSurplusAdvice']);
+    Route::get('/platform/iot-status', [EnergyController::class, 'getIoTNetworkStatus']);
 });

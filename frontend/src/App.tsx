@@ -8,6 +8,7 @@ import SettlementPanel from './components/SettlementPanel';
 import OfferExtrasPanel from './components/OfferExtrasPanel';
 import BundlePanel from './components/BundlePanel';
 import PatternsPanel from './components/PatternsPanel';
+import PlatformPanel from './components/PlatformPanel';
 
 const heroPhotos = [
   {
@@ -130,6 +131,9 @@ function App() {
         </section>
         <section className="content-section panel-section" id="paquetes">
           <BundlePanel />
+        </section>
+        <section className="content-section panel-section" id="plataforma">
+          <PlatformPanel onSystemChanged={handleOfferCreated} />
         </section>
         <section className="content-section panel-section" id="patrones">
           <PatternsPanel onSystemChanged={handleOfferCreated} />
