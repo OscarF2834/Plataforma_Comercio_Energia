@@ -1,0 +1,2028 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<title>Guía de Exposición — Plataforma de Comercio de Energía</title>
+</head><body>
+<h1 id="guia-de-estudio-para-la-exposicion">Guía de Estudio para la Exposición</h1>
+<h2 id="plataforma-de-comercio-de-energia-12-patrones-de-diseno-backend-y-frontend">Plataforma de Comercio de Energía — 12 Patrones de Diseño (Backend y Frontend)</h2>
+<blockquote>
+<p><strong>Propósito de este documento.</strong> Reúne, en un solo lugar, todo lo necesario para
+estudiar y exponer el proyecto: contexto, arquitectura, los 12 patrones de diseño
+(cada uno en backend PHP y frontend React/TypeScript), guion sugerido de exposición,
+demo paso a paso, comparaciones típicas, preguntas frecuentes del jurado y mapeo con
+la rúbrica. Está pensado para leerse en voz alta o resumirse con notas al margen.</p>
+</blockquote>
+<hr />
+<h2 id="indice">Índice</h2>
+<ol>
+<li><a href="#1-cómo-usar-esta-guía">Cómo usar esta guía</a></li>
+<li><a href="#2-resumen-ejecutivo-del-proyecto">Resumen ejecutivo del proyecto</a></li>
+<li><a href="#3-arquitectura-general">Arquitectura general</a></li>
+<li><a href="#4-guion-de-exposición-1215-minutos">Guion de exposición (12–15 minutos)</a></li>
+<li><a href="#5-los-12-patrones-de-diseño">Los 12 patrones de diseño</a>
+   - <a href="#51-singleton">5.1 Singleton</a>
+   - <a href="#52-factory-method">5.2 Factory Method</a>
+   - <a href="#53-abstract-method--template-method">5.3 Abstract Method / Template Method</a>
+   - <a href="#54-builder">5.4 Builder</a>
+   - <a href="#55-prototype">5.5 Prototype</a>
+   - <a href="#56-adapter">5.6 Adapter</a>
+   - <a href="#57-bridge">5.7 Bridge</a>
+   - <a href="#58-decorator">5.8 Decorator</a>
+   - <a href="#59-composite">5.9 Composite</a>
+   - <a href="#510-facade">5.10 Facade</a>
+   - <a href="#511-flyweight">5.11 Flyweight</a>
+   - <a href="#512-proxy">5.12 Proxy</a></li>
+<li><a href="#6-demo-en-vivo-paso-a-paso">Demo en vivo paso a paso</a></li>
+<li><a href="#7-comparaciones-que-suelen-preguntar">Comparaciones que suelen preguntar</a></li>
+<li><a href="#8-preguntas-frecuentes-del-jurado-y-respuestas-modelo">Preguntas frecuentes del jurado y respuestas modelo</a></li>
+<li><a href="#9-mapa-de-la-rúbrica-y-los-objetivos-del-proyecto">Mapa de la rúbrica y los objetivos del proyecto</a></li>
+<li><a href="#10-endpoints-y-comandos-útiles">Endpoints y comandos útiles</a></li>
+<li><a href="#11-glosario-rápido">Glosario rápido</a></li>
+<li><a href="#12-checklist-final-antes-de-exponer">Checklist final antes de exponer</a></li>
+</ol>
+<hr />
+<h2 id="1-como-usar-esta-guia">1. Cómo usar esta guía</h2>
+<p><strong>Plan sugerido de estudio (3 sesiones):</strong></p>
+<table>
+<thead>
+<tr>
+<th>Sesión</th>
+<th>Duración</th>
+<th>Qué estudiar</th>
+<th>Objetivo</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>60 min</td>
+<td>Secciones 1–3 (contexto y arquitectura)</td>
+<td>Entender <em>qué</em> es el proyecto y <em>cómo</em> está organizado</td>
+</tr>
+<tr>
+<td>2</td>
+<td>90 min</td>
+<td>Sección 5 (patrones 1–6)</td>
+<td>Dominar la primera mitad de patrones</td>
+</tr>
+<tr>
+<td>3</td>
+<td>90 min</td>
+<td>Sección 5 (patrones 7–12) + 6 y 7</td>
+<td>Dominar la segunda mitad y la demo</td>
+</tr>
+<tr>
+<td>Repaso</td>
+<td>30 min</td>
+<td>Secciones 8, 9, 12</td>
+<td>Anticipar preguntas y verificar checklist</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Cómo leer cada patrón (sección 5).</strong> Cada patrón tiene siempre la misma estructura:</p>
+<ul>
+<li><strong>Idea en una frase</strong> → para decir en voz alta.</li>
+<li><strong>Problema y solución en el proyecto</strong> → el <em>porqué</em>.</li>
+<li><strong>Participantes y archivos</strong> → el <em>qué</em> (con rutas exactas).</li>
+<li><strong>Cómo funciona</strong> → el <em>cómo</em>, paso a paso.</li>
+<li><strong>Código clave</strong> → para señalar en pantalla.</li>
+<li><strong>Dónde se ve en la app</strong> → la evidencia funcional.</li>
+<li><strong>Frase de cierre / transición</strong> → para fluir hacia el siguiente patrón.</li>
+</ul>
+<blockquote>
+<p><strong>Consejo.</strong> Si el tiempo aprieta, memoriza las <em>ideas en una frase</em> y las
+<em>frases de transición</em>: son el esqueleto de la exposición. El detalle técnico
+lo puedes apoyar señalando el código y el README.</p>
+</blockquote>
+<hr />
+<h2 id="2-resumen-ejecutivo-del-proyecto">2. Resumen ejecutivo del proyecto</h2>
+<p><strong>¿Qué es?</strong> Una <strong>Plataforma de Comercio de Energía</strong>: un prototipo web donde los
+usuarios intercambian <strong>excedentes de energía renovable</strong>. Un usuario que produce
+más de lo que consume publica su excedente; otro que necesita energía lo compra.</p>
+<p><strong>Problema que resuelve.</strong> Los excedentes de energía de pequeños productores suelen
+perderse porque no hay un canal simple para publicarlos, compararlos y venderlos.
+La plataforma crea un <strong>mercado virtual</strong> con ofertas, compras, subastas, dispositivos
+IoT simulados y predicciones.</p>
+<p><strong>Alcance.</strong> Es un <strong>prototipo funcional académico</strong>: no hay pagos reales, ni conexión
+con redes eléctricas, ni facturación real, ni hardware IoT físico. Todo se simula con
+un <strong>saldo/transacción virtual</strong> y una <strong>base de datos en memoria persistida en JSON</strong>.</p>
+<p><strong>Usuarios:</strong></p>
+<ul>
+<li><strong>Productor:</strong> genera energía y vende excedentes.</li>
+<li><strong>Consumidor:</strong> compra energía disponible.</li>
+<li><strong>Doble rol:</strong> un mismo usuario puede producir y consumir.</li>
+</ul>
+<p><strong>Los 4 subsistemas:</strong></p>
+<ol>
+<li><strong>Compra y venta de excedentes</strong> — ofertas (kWh y precio), compras e historial.</li>
+<li><strong>Subastas en tiempo real</strong> — ofertas con precio inicial y cierre por mejor oferta.</li>
+<li><strong>Integración con dispositivos IoT</strong> — medidores/inversores simulados que reportan lecturas.</li>
+<li><strong>Predicción de producción y consumo</strong> — estimaciones diaria/semanal y recomendaciones.</li>
+</ol>
+<p><strong>Objetivo principal.</strong> Desarrollar una plataforma web para gestionar el intercambio de
+excedentes integrando producción, consumo, excedentes, predicciones, compra, venta e
+historial, con una <strong>arquitectura organizada, escalable y mantenible</strong>.</p>
+<p><strong>Stack tecnológico:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Capa</th>
+<th>Tecnología</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Frontend</td>
+<td>React + TypeScript + Vite</td>
+</tr>
+<tr>
+<td>Backend</td>
+<td>Laravel + PHP 8</td>
+</tr>
+<tr>
+<td>Persistencia</td>
+<td>Archivos JSON (<code>storage/app/*.json</code>) — base de datos en memoria</td>
+</tr>
+<tr>
+<td>Patrones</td>
+<td>12 patrones GoF implementados en backend y frontend</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Cifras para mencionar:</strong> 12 patrones × 2 capas = <strong>~26 implementaciones</strong> documentadas;
+más de <strong>50 endpoints</strong> REST; <strong>10 paneles</strong> funcionales en la interfaz.</p>
+<hr />
+<h2 id="3-arquitectura-general">3. Arquitectura general</h2>
+<h3 id="31-vista-de-capas">3.1 Vista de capas</h3>
+<pre class="codehilite"><code>┌──────────────────────────────────────────────────────────────┐
+│                      FRONTEND (React + TS)                     │
+│  Componentes (paneles)  →  Patrones del navegador              │
+│      EnergyDashboard · CreateOffer · PredictionPanel · …       │
+│      Facade · Proxy · Flyweight · Builder · Prototype · …      │
+└───────────────────────────────┬──────────────────────────────┘
+                                │ HTTP/JSON (fetch)
+┌───────────────────────────────▼──────────────────────────────┐
+│                      BACKEND (Laravel + PHP)                   │
+│  EnergyController  →  Patrones del servidor                   │
+│      Proxy (MarketProxy) · Facade · MarketService · Builder ·  │
+│      Prototype · Flyweight · Adapter · Bridge · …             │
+└───────────────────────────────┬──────────────────────────────┘
+                                │
+┌───────────────────────────────▼──────────────────────────────┐
+│              Persistencia: JSON en storage/app/               │
+│   market_data.json · logger_data.json · flyweight_data.json ·  │
+│   market_proxy_cache.json · …                                  │
+└──────────────────────────────────────────────────────────────┘
+</code></pre>
+
+<h3 id="32-mapa-de-carpetas-lo-importante">3.2 Mapa de carpetas (lo importante)</h3>
+<p><strong>Backend</strong> (<code>backend-laravel/</code>):</p>
+<pre class="codehilite"><code>app/Http/Controllers/EnergyController.php     ← endpoints (cliente de los patrones)
+app/Models/EnergyOffer.php                    ← oferta de energía
+app/Patterns/
+├── MarketService.php            (Singleton)  ├── LoggerService.php (Singleton)
+├── ConfigService.php            (Singleton)
+├── Factories/                   (Factory Method)  EnergySourceFactory, PredictorFactory
+├── Predictors/                  (Abstract Method) AbstractPredictor, Daily/WeeklyPredictor
+├── Builders/                    (Builder)    EnergyOfferBuilder, OfferDirector
+├── Prototypes/                  (Prototype)  Prototype, OfferPrototype, PrototypeRegistry
+├── Adapters/                    (Adapter)    DeviceGateway, LegacyScadaAdapter, PvInverterAdapter
+├── Bridges/                     (Bridge)     EnergyBill, CurrencyBridge, SettlementService
+├── Decorators/                  (Decorator)  OfferComponent, BasicOffer, 3 decoradores
+├── Composite/                   (Composite)  BundleComponent, OfferLeaf, EnergyBundle
+├── Facades/                     (Facade)     EnergyPlatformFacade
+├── Flyweights/     (NUEVO)      (Flyweight)  EnergySourceFlyweightFactory
+└── Proxies/        (NUEVO)      (Proxy)      MarketProxy
+routes/api.php                                  ← rutas /api/energy/*
+</code></pre>
+
+<p><strong>Frontend</strong> (<code>frontend/src/</code>):</p>
+<pre class="codehilite"><code>App.tsx                             ← estructura visual (hero + 10 secciones)
+components/                         ← paneles visibles al usuario
+│  EnergyDashboard.tsx  CreateOffer.tsx  PredictionPanel.tsx  OfferPrototypePanel.tsx
+│  DevicePanel.tsx  SettlementPanel.tsx  OfferExtrasPanel.tsx  BundlePanel.tsx
+│  PlatformPanel.tsx  PatternsPanel.tsx (NUEVO)
+patterns/
+├── singleton/energy-api.service.ts (Singleton)
+├── factory/                        (Factory Method)  EnergyCardFactory + cards
+├── template/                       (Abstract Method) Predictor, Daily/WeeklyPredictor
+├── builder/                        (Builder)         EnergyOfferBuilder, OfferDirector
+├── prototype/                      (Prototype)       Prototype, OfferPrototype, PrototypeRegistry
+├── adapter/                        (Adapter)         DeviceGateway, adaptadores, registry
+├── bridge/                         (Bridge)          EnergyBill, CurrencyBridge, SettlementService
+├── decorator/                      (Decorator)       OfferComponent, BasicOffer, decoradores
+├── composite/                      (Composite)       BundleComponent, OfferLeaf, EnergyBundle
+├── facade/                         (Facade)          PlatformFacade
+├── flyweight/  (NUEVO)             (Flyweight)       EnergyTypeFlyweightFactory
+└── proxy/      (NUEVO)             (Proxy)           EnergyApiProxy
+</code></pre>
+
+<h3 id="33-flujo-tipico-de-una-compra-para-explicar-la-integracion">3.3 Flujo típico de una compra (para explicar la integración)</h3>
+<ol>
+<li>El usuario ve <strong>ofertas</strong> en <code>EnergyDashboard</code>. El frontend las pide a través del
+   <strong><code>EnergyApiProxy</code></strong> (Proxy), que puede servirlas desde su <strong>caché</strong> o delegar en
+   <code>EnergyApiService</code> (Singleton).</li>
+<li>La petición llega a <code>GET /api/energy/offers</code>. En el backend, <strong><code>EnergyController</code></strong>
+   consulta el <strong><code>MarketProxy</code></strong> (Proxy: caché + protección), que delega en
+   <strong><code>MarketService</code></strong> (Singleton) si la caché expiró.</li>
+<li>Cada oferta se <strong>enriquece con los descriptores compartidos</strong> del
+   <strong><code>EnergySourceFlyweightFactory</code></strong> (Flyweight): el nombre, color y eficiencia del
+   tipo de energía se guardan una sola vez.</li>
+<li>Al <strong>comprar</strong>, <code>POST /api/energy/offers/{id}/purchase</code> pasa por el <strong>Proxy de
+   protección</strong> (mínimo 1 kWh, máximo 100 kWh) y, si es válido, el mercado actualiza
+   el stock y <strong>invalida la caché</strong>.</li>
+<li>El <strong>Facade</strong> (<code>EnergyPlatformFacade</code>/<code>PlatformFacade</code>) permite hacer todo lo anterior
+   en operaciones de alto nivel (panel unificado, publicar, comprar + liquidar, asesoría).</li>
+</ol>
+<h3 id="34-tabla-maestra-de-patrones">3.4 Tabla maestra de patrones</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Patrón</th>
+<th>Problema que resuelve</th>
+<th>Artefactos clave</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><strong>Singleton</strong></td>
+<td>Una sola instancia/estado compartido</td>
+<td><code>MarketService</code>, <code>LoggerService</code>, <code>ConfigService</code>, <code>EnergyApiService</code></td>
+</tr>
+<tr>
+<td>2</td>
+<td><strong>Factory Method</strong></td>
+<td>Crear el objeto correcto según un tipo sin <code>new</code> disperso</td>
+<td><code>EnergySourceFactory</code>, <code>PredictorFactory</code>, <code>EnergyCardFactory</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td><strong>Abstract Method</strong> (Template Method)</td>
+<td>Reutilizar el esqueleto de un algoritmo variando los datos</td>
+<td><code>AbstractPredictor</code> + <code>Daily/WeeklyPredictor</code>, <code>Predictor</code> + variantes</td>
+</tr>
+<tr>
+<td>4</td>
+<td><strong>Builder</strong></td>
+<td>Construir ofertas complejas paso a paso y con variantes</td>
+<td><code>EnergyOfferBuilder</code>, <code>OfferDirector</code></td>
+</tr>
+<tr>
+<td>5</td>
+<td><strong>Prototype</strong></td>
+<td>Copiar ofertas/plantillas sin reconstruirlas desde cero</td>
+<td><code>Prototype</code>, <code>OfferPrototype</code>, <code>PrototypeRegistry</code></td>
+</tr>
+<tr>
+<td>6</td>
+<td><strong>Adapter</strong></td>
+<td>Unificar dispositivos heredados heterogéneos</td>
+<td><code>DeviceGateway</code>, <code>LegacyScadaAdapter</code>, <code>PvInverterAdapter</code></td>
+</tr>
+<tr>
+<td>7</td>
+<td><strong>Bridge</strong></td>
+<td>Combinar perfiles de facturación × monedas sin explotar clases</td>
+<td><code>EnergyBill</code>, <code>CurrencyBridge</code>, <code>SettlementService</code></td>
+</tr>
+<tr>
+<td>8</td>
+<td><strong>Decorator</strong></td>
+<td>Añadir extras a una oferta dinámicamente</td>
+<td><code>BasicOffer</code>, <code>OfferDecorator</code>, <code>OfferPricingService</code></td>
+</tr>
+<tr>
+<td>9</td>
+<td><strong>Composite</strong></td>
+<td>Tratar ofertas y paquetes de ofertas por igual (recursivo)</td>
+<td><code>BundleComponent</code>, <code>OfferLeaf</code>, <code>EnergyBundle</code></td>
+</tr>
+<tr>
+<td>10</td>
+<td><strong>Facade</strong></td>
+<td>Simplificar el acceso a muchos subsistemas</td>
+<td><code>EnergyPlatformFacade</code>, <code>PlatformFacade</code></td>
+</tr>
+<tr>
+<td>11</td>
+<td><strong>Flyweight</strong></td>
+<td>Compartir estado común entre muchísimas ofertas</td>
+<td><code>EnergySourceFlyweightFactory</code>, <code>EnergyTypeFlyweightFactory</code></td>
+</tr>
+<tr>
+<td>12</td>
+<td><strong>Proxy</strong></td>
+<td>Controlar el acceso: caché, virtualización y protección</td>
+<td><code>MarketProxy</code>, <code>EnergyApiProxy</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="4-guion-de-exposicion-1215-minutos">4. Guion de exposición (12–15 minutos)</h2>
+<blockquote>
+<p>Este guion es una <strong>sugerencia</strong>. Los tiempos son orientativos para una exposición
+de ~14 minutos con demo en vivo.</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th>Tiempo</th>
+<th>Bloque</th>
+<th>Qué decir (resumen)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0:00–1:00</td>
+<td><strong>Contexto</strong></td>
+<td>Qué es la plataforma, problema, usuarios y los 4 subsistemas.</td>
+</tr>
+<tr>
+<td>1:00–2:00</td>
+<td><strong>Arquitectura</strong></td>
+<td>Dos capas (React/TS y Laravel/PHP), persistencia JSON y el flujo de compra.</td>
+</tr>
+<tr>
+<td>2:00–3:00</td>
+<td><strong>Singleton</strong></td>
+<td>Un solo mercado, un solo logger, una sola config; un solo cliente HTTP.</td>
+</tr>
+<tr>
+<td>3:00–4:00</td>
+<td><strong>Factory Method</strong></td>
+<td>El tipo de energía (<code>solar/wind/hydro</code>) decide qué clase y qué tarjeta se crean.</td>
+</tr>
+<tr>
+<td>4:00–5:00</td>
+<td><strong>Abstract Method</strong></td>
+<td>Predicción diaria/semanal comparte el esqueleto <code>predict()</code>.</td>
+</tr>
+<tr>
+<td>5:00–6:00</td>
+<td><strong>Builder</strong></td>
+<td>El asistente de 6 pasos construye la oferta; variante exprés con precio por defecto.</td>
+</tr>
+<tr>
+<td>6:00–7:00</td>
+<td><strong>Prototype</strong></td>
+<td>Duplicar una oferta o partir de una plantilla con un “copy”.</td>
+</tr>
+<tr>
+<td>7:00–8:00</td>
+<td><strong>Adapter</strong></td>
+<td>Medidores SCADA e inversores PV se ven igual tras la interfaz <code>DeviceGateway</code>.</td>
+</tr>
+<tr>
+<td>8:00–9:00</td>
+<td><strong>Bridge</strong></td>
+<td>Perfil (residencial/comercial) × moneda (COP/USD/EUR) sin combinatoria de clases.</td>
+</tr>
+<tr>
+<td>9:00–10:00</td>
+<td><strong>Decorator</strong></td>
+<td>Extras de oferta (verde +5%, seguro +3%, prioridad $8.000) que se envuelven.</td>
+</tr>
+<tr>
+<td>10:00–11:00</td>
+<td><strong>Composite</strong></td>
+<td>Paquetes de ofertas con totales recursivos.</td>
+</tr>
+<tr>
+<td>11:00–12:00</td>
+<td><strong>Facade</strong></td>
+<td>Una sola llamada trae mercado, IoT, config y actividad; y publica/compra.</td>
+</tr>
+<tr>
+<td>12:00–12:40</td>
+<td><strong>Flyweight</strong></td>
+<td>3 descriptores compartidos para todas las ofertas.</td>
+</tr>
+<tr>
+<td>12:40–13:30</td>
+<td><strong>Proxy</strong></td>
+<td>Caché con TTL, inicialización diferida y protección de compras.</td>
+</tr>
+<tr>
+<td>13:30–14:00</td>
+<td><strong>Cierre</strong></td>
+<td>Cumplimiento de objetivos, rúbrica y agradecimiento.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Frases de transición que puedes usar tal cual:</strong></p>
+<ul>
+<li><em>Singleton → Factory:</em> “Ya que todos comparten los mismos servicios, el siguiente reto es <strong>crear el objeto correcto</strong> según el tipo de energía; para eso usamos <em>Factory Method</em>.”</li>
+<li><em>Factory → Abstract Method:</em> “La fábrica decide <strong>qué</strong> objeto crear; ahora necesitamos que <strong>compartan un algoritmo</strong>; eso lo resuelve el <em>Template Method</em>.”</li>
+<li><em>Abstract Method → Builder:</em> “Si podemos predecir, también podemos <strong>construir ofertas</strong> paso a paso; ahí entra el <em>Builder</em>.”</li>
+<li><em>Builder → Prototype:</em> “Construir está bien, pero a veces conviene <strong>copiar</strong>; para eso usamos <em>Prototype</em>.”</li>
+<li><em>Prototype → Adapter:</em> “Del mercado pasamos al <strong>mundo físico simulado</strong>: sensores y dispositivos que hablan distinto; el <em>Adapter</em> los unifica.”</li>
+<li><em>Adapter → Bridge:</em> “Con los datos unificados, debemos <strong>facturarlos</strong> en distintos perfiles y monedas; el <em>Bridge</em> separa esas dos dimensiones.”</li>
+<li><em>Bridge → Decorator:</em> “La factura es el precio base; para <strong>añadir extras</strong> sin tocar la base, usamos el <em>Decorator</em>.”</li>
+<li><em>Decorator → Composite:</em> “Con las ofertas ya decoradas, podemos <strong>agruparlas en paquetes</strong>; el <em>Composite</em> permite tratarlas todas igual.”</li>
+<li><em>Composite → Facade:</em> “Ya tenemos muchos subsistemas; para no obligar al cliente a conocerlos, ponemos un <em>Facade</em>.”</li>
+<li><em>Facade → Flyweight:</em> “El Facade coordina datos; pero con muchas ofertas repetiríamos información. El <em>Flyweight</em> <strong>la comparte</strong>.”</li>
+<li><em>Flyweight → Proxy:</em> “Y para no consultar el mercado en cada petición y <strong>proteger las compras</strong>, cerramos con el <em>Proxy</em>.”</li>
+</ul>
+<hr />
+<h2 id="5-los-12-patrones-de-diseno">5. Los 12 patrones de diseño</h2>
+<blockquote>
+<p>En cada patrón: primero la idea, luego el detalle. Las rutas de archivo son las
+reales del repositorio.</p>
+</blockquote>
+<hr />
+<h3 id="51-singleton">5.1 Singleton</h3>
+<p><strong>Idea en una frase.</strong></p>
+<blockquote>
+<p>“Garantiza <strong>una única instancia</strong> y un punto de acceso global, para que todos los
+módulos compartan el mismo estado.”</p>
+</blockquote>
+<p><strong>Problema y solución en el proyecto.</strong>
+El mercado de energía, los logs y la configuración no pueden vivir duplicados: si cada
+controlador creara su propio <code>MarketService</code>, unos verían ofertas que otros no. El
+Singleton garantiza <strong>un solo mercado, un solo logger y una sola configuración</strong>.
+En el frontend, un solo cliente HTTP comparte la URL base y evita abrir conexiones
+innecesarias.</p>
+<p><strong>Participantes y archivos (4 implementaciones).</strong></p>
+<table>
+<thead>
+<tr>
+<th>Implementación</th>
+<th>Archivo</th>
+<th>Rol</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MarketService</code></td>
+<td><code>backend-laravel/app/Patterns/MarketService.php</code></td>
+<td>Mercado: ofertas + transacciones, persistido en JSON</td>
+</tr>
+<tr>
+<td><code>LoggerService</code></td>
+<td><code>backend-laravel/app/Patterns/LoggerService.php</code></td>
+<td>Logs y métricas de actividad</td>
+</tr>
+<tr>
+<td><code>ConfigService</code></td>
+<td><code>backend-laravel/app/Patterns/ConfigService.php</code></td>
+<td>Constantes globales (precio, moneda, límites, TTL)</td>
+</tr>
+<tr>
+<td><code>EnergyApiService</code></td>
+<td><code>frontend/src/patterns/singleton/energy-api.service.ts</code></td>
+<td>Cliente HTTP único del frontend</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Cómo funciona (los 3 pasos clásicos).</strong></p>
+<ol>
+<li><strong>Atributo estático privado</strong> que guarda la instancia (<code>private static ?MarketService $instance = null;</code>).</li>
+<li><strong>Constructor privado</strong> (<code>private function __construct() {}</code>) → nadie puede hacer <code>new</code>.</li>
+<li><strong>Método estático</strong> <code>getInstance()</code> que crea la instancia solo la primera vez y luego
+   devuelve siempre la misma.</li>
+</ol>
+<p><strong>Código clave (backend):</strong></p>
+<pre class="codehilite"><code class="language-php">class MarketService
+{
+    private static ?MarketService $instance = null;
+    private array $offers = [];
+
+    private function __construct()      // 1) constructor privado
+    {
+        $this-&gt;dataFile = storage_path('app/market_data.json');
+        $this-&gt;load();                  // 2) estado persistido, único
+    }
+
+    public static function getInstance(): self   // 3) acceso global
+    {
+        if (self::$instance === null) {
+            self::$instance = new self();
+        }
+        return self::$instance;
+    }
+}
+</code></pre>
+
+<p><strong>Código clave (frontend):</strong></p>
+<pre class="codehilite"><code class="language-typescript">class EnergyApiService {
+  private static instance: EnergyApiService;
+  private baseUrl = 'http://localhost:8000/api';
+
+  private constructor() {}                         // constructor privado
+
+  static getInstance(): EnergyApiService {         // acceso global
+    if (!EnergyApiService.instance) {
+      EnergyApiService.instance = new EnergyApiService();
+    }
+    return EnergyApiService.instance;
+  }
+}
+</code></pre>
+
+<p><strong>Dónde se ve en la app y datos útiles.</strong>
+<code>ConfigService</code> alimenta los límites del mercado: <code>defaultPricePerKwh = 500</code>,
+<code>currency = COP</code>, <code>maxOfferKwh = 1000</code>, <code>minPurchaseKwh = 1</code>, <code>maxPurchaseKwh = 100</code>,
+<code>offersCacheTtl = 10</code> segundos. Cada panel del frontend usa el mismo
+<code>EnergyApiService.getInstance()</code>, por lo que todos apuntan al mismo backend.</p>
+<p><strong>Frase de cierre / transición.</strong></p>
+<blockquote>
+<p>“Con un estado único garantizado, el siguiente problema es: <strong>¿cómo creamos el objeto
+correcto según el tipo de energía?</strong> Para eso, <em>Factory Method</em>.”</p>
+</blockquote>
+<hr />
+<h3 id="52-factory-method">5.2 Factory Method</h3>
+<p><strong>Idea en una frase.</strong></p>
+<blockquote>
+<p>“Una fábrica recibe un <strong>tipo</strong> y devuelve <strong>la clase concreta correcta</strong>, sin que el
+código de negocio use <code>new</code> por todas partes.”</p>
+</blockquote>
+<p><strong>Problema y solución en el proyecto.</strong>
+La plataforma maneja varios <strong>tipos/fuentes de energía</strong> (solar, eólica, hidráulica) y
+varios <strong>períodos de predicción</strong> (diario, semanal). Si cada parte del sistema creara
+esos objetos a mano, añadir un tipo nuevo obligaría a editar muchos archivos. La fábrica
+centraliza la creación: basta con registrar la nueva clase en la fábrica.</p>
+<p><strong>Participantes y archivos (3 implementaciones).</strong></p>
+<table>
+<thead>
+<tr>
+<th>Fábrica</th>
+<th>Archivo</th>
+<th>Productos</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>EnergySourceFactory</code></td>
+<td><code>backend-laravel/app/Patterns/Factories/EnergySourceFactory.php</code></td>
+<td><code>SolarEnergy</code>, <code>WindEnergy</code>, <code>HydroEnergy</code></td>
+</tr>
+<tr>
+<td><code>PredictorFactory</code></td>
+<td><code>backend-laravel/app/Patterns/Factories/PredictorFactory.php</code></td>
+<td><code>DailyPredictor</code>, <code>WeeklyPredictor</code></td>
+</tr>
+<tr>
+<td><code>EnergyCardFactory</code></td>
+<td><code>frontend/src/patterns/factory/EnergyCardFactory.tsx</code></td>
+<td><code>SolarCard</code>, <code>WindCard</code>, <code>HydroCard</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Producto abstracto (backend):</strong> <code>abstract class EnergySource</code> con <code>getType()</code>,
+<code>getName()</code>, <code>getDescription()</code>, <code>getEfficiency()</code>, <code>getColor()</code> y <code>toArray()</code>.</p>
+<p><strong>Código clave (fábrica backend):</strong></p>
+<pre class="codehilite"><code class="language-php">class EnergySourceFactory
+{
+    public const TYPES = ['solar', 'wind', 'hydro'];
+
+    public function create(string $type): EnergySource
+    {
+        return match (strtolower($type)) {
+            'solar' =&gt; new SolarEnergy(),
+            'wind'  =&gt; new WindEnergy(),
+            'hydro' =&gt; new HydroEnergy(),
+            default =&gt; throw new \InvalidArgumentException(&quot;Tipo de energia no soportado: {$type}&quot;),
+        };
+    }
+
+    public function createAll(): array
+    {
+        return array_map(fn (string $t) =&gt; $this-&gt;create($t), self::TYPES);
+    }
+}
+</code></pre>
+
+<p><strong>Código clave (fábrica frontend):</strong></p>
+<pre class="codehilite"><code class="language-tsx">class EnergyCardFactory {
+  create(type: string): (props: { source: EnergySource }) =&gt; JSX.Element {
+    switch (type) {
+      case 'solar': return SolarCard;
+      case 'wind':  return WindCard;
+      case 'hydro': return HydroCard;
+      default: throw new Error(`Tipo de energia no soportado: ${type}`);
+    }
+  }
+}
+export default new EnergyCardFactory();   // instancia única compartida
+</code></pre>
+
+<p><strong>Dónde se ve en la app y endpoints.</strong></p>
+<ul>
+<li><code>GET /api/energy/source-catalog</code> devuelve el catálogo creado por la fábrica.</li>
+<li>El paso 2 del asistente de publicación (<code>CreateOffer</code>) muestra las tarjetas de
+  energía que produce <code>EnergyCardFactory</code>.</li>
+<li><code>MarketService</code>/<code>EnergyOfferBuilder</code> <strong>validan el tipo</strong> de energía con la fábrica al
+  registrar una oferta: un tipo inválido produce HTTP 422.</li>
+</ul>
+<p><strong>Frase de cierre / transición.</strong></p>
+<blockquote>
+<p>“La fábrica decide <strong>qué</strong> crear; ahora necesitamos que esos objetos compartan <strong>cómo</strong>
+se calcula un resultado. Eso es el <em>Template Method</em>.”</p>
+</blockquote>
+<hr />
+<h3 id="53-abstract-method-template-method">5.3 Abstract Method / Template Method</h3>
+<p><strong>Idea en una frase.</strong></p>
+<blockquote>
+<p>“Una clase abstracta define el <strong>esqueleto del algoritmo</strong> y los pasos que cada
+subclase debe completar; la lógica común se escribe una sola vez.”</p>
+</blockquote>
+<p><strong>Problema y solución en el proyecto.</strong>
+El subsistema de predicción estima producción, consumo, excedente/déficit, una acción
+(<code>publish</code>/<code>buy</code>/<code>none</code>) y una recomendación. Toda esa lógica es <strong>igual</strong> para una
+predicción diaria o semanal; solo cambian los <strong>datos/estimaciones</strong>. La clase abstracta
+<code>predict()</code> implementa el esqueleto y las subclases solo aportan los detalles.</p>
+<p><strong>Participantes y archivos (2 implementaciones).</strong></p>
+<table>
+<thead>
+<tr>
+<th>Capa</th>
+<th>Archivo</th>
+<th>Clases</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Backend</td>
+<td><code>app/Patterns/Predictors/AbstractPredictor.php</code> (+ <code>DailyPredictor.php</code>, <code>WeeklyPredictor.php</code>)</td>
+<td>Clase base + 2 subclases</td>
+</tr>
+<tr>
+<td>Frontend</td>
+<td><code>frontend/src/patterns/template/Predictor.ts</code> (+ <code>DailyPredictor.ts</code>, <code>WeeklyPredictor.ts</code>)</td>
+<td>Clase base + 2 subclases</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Cómo funciona.</strong></p>
+<ol>
+<li>La clase base declara métodos <strong>abstractos</strong>: <code>getPeriod()</code>, <code>getProductionEstimate()</code>,
+   <code>getConsumptionEstimate()</code>, <code>getDescription()</code>, <code>getColor()</code>.</li>
+<li>La clase base implementa el <strong>método plantilla</strong> <code>predict()</code>, que llama a esos métodos
+   y calcula excedente/déficit, acción y recomendación usando el <strong>contexto real del
+   mercado</strong> (<code>MarketService::getMarketContext()</code>).</li>
+<li>Cada subclase solo define los valores (diario usa el dato directo; semanal lo escala ×6).</li>
+</ol>
+<p><strong>Código clave (backend):</strong></p>
+<pre class="codehilite"><code class="language-php">abstract class AbstractPredictor
+{
+    abstract public function getPeriod(): string;
+    abstract public function getProductionEstimate(): float;
+    abstract public function getConsumptionEstimate(): float;
+
+    final public function predict(): array   // ← método plantilla
+    {
+        $production  = $this-&gt;getProductionEstimate();
+        $consumption = $this-&gt;getConsumptionEstimate();
+        $surplus     = $production - $consumption;
+
+        return [
+            'period' =&gt; $this-&gt;getPeriod(),
+            'surplusEstimate' =&gt; round(max(0, $surplus), 2),
+            'deficitEstimate' =&gt; round(max(0, -$surplus), 2),
+            'action' =&gt; $this-&gt;getAction($surplus),           // publish/buy/none
+            'recommendation' =&gt; $this-&gt;buildRecommendation($surplus),
+            'market' =&gt; $this-&gt;marketContext,
+        ];
+    }
+}
+
+class WeeklyPredictor extends AbstractPredictor {
+    public function getProductionEstimate(): float {
+        return $this-&gt;production &gt; 0 ? $this-&gt;production * 6 : 21.5;   // solo cambia el dato
+    }
+}
+</code></pre>
+
+<p><strong>Dónde se ve en la app y endpoints.</strong></p>
+<ul>
+<li><code>PredictionPanel</code> tiene dos botones: <strong>“Calcular local”</strong> ejecuta el patrón en
+  TypeScript y <strong>“Consultar backend”</strong> lo ejecuta en PHP (<code>GET /api/energy/predictions</code>).</li>
+<li>La recomendación muestra cifras <strong>reales</strong> del mercado (precio promedio, ofertas activas).</li>
+<li>El panel permite <strong>accionar</strong> la predicción: si hay excedente, publica una oferta real;
+  si hay déficit, compra energía real.</li>
+</ul>
+<p><strong>Frase de cierre / transición.</strong></p>
+<blockquote>
+<p>“Ya sabemos predecir; ahora queremos <strong>publicar ofertas construidas paso a paso</strong>.
+Ese es el <em>Builder</em>.”</p>
+</blockquote>
+<hr />
+<h3 id="54-builder">5.4 Builder</h3>
+<p><strong>Idea en una frase.</strong></p>
+<blockquote>
+<p>“Construye un objeto <strong>complejo paso a paso</strong>, separando el proceso de construcción de
+la representación final, y permite <strong>variantes</strong> con el mismo código.”</p>
+</blockquote>
+<p><strong>Problema y solución en el proyecto.</strong>
+Publicar una oferta implica varios campos (productor, tipo, cantidad, precio, descripción).
+En lugar de un gran constructor con muchos parámetros, un <strong>builder</strong> expone pasos
+encadenables y un <strong>director</strong> orquesta distintos “recetarios”: la oferta <strong>personalizada</strong>
+y la oferta <strong>exprés</strong> (que completa el precio por defecto desde <code>ConfigService</code>).</p>
+<p><strong>Participantes y archivos (2 implementaciones).</strong></p>
+<table>
+<thead>
+<tr>
+<th>Capa</th>
+<th>Archivos</th>
+<th>Rol</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Backend</td>
+<td><code>app/Patterns/Builders/EnergyOfferBuilder.php</code>, <code>OfferDirector.php</code></td>
+<td>Builder + Director</td>
+</tr>
+<tr>
+<td>Frontend</td>
+<td><code>frontend/src/patterns/builder/EnergyOfferBuilder.ts</code>, <code>OfferDirector.ts</code></td>
+<td>Builder + Director</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Cómo funciona.</strong></p>
+<ul>
+<li><strong>Builder:</strong> <code>reset()</code>, <code>setProducer()</code>, <code>setEnergyType()</code>, <code>setQuantity()</code>,
+  <code>setPricePerKwh()</code>, <code>setDescription()</code>, <code>build()</code>. Valida cantidad y precio y delega
+  el tipo en <code>EnergySourceFactory</code>.</li>
+<li><strong>Director:</strong> <code>buildFromRequest($data)</code> (oferta completa) y
+  <code>buildExpressOffer($nombre, $kwh, $tipo)</code> (precio por defecto de <code>ConfigService</code>).</li>
+</ul>
+<p><strong>Código clave (director backend):</strong></p>
+<pre class="codehilite"><code class="language-php">class OfferDirector
+{
+    public function __construct(private EnergyOfferBuilder $builder) {}
+
+    public function buildFromRequest(array $data): EnergyOffer
+    {
+        return $this-&gt;builder
+            -&gt;reset()
+            -&gt;setProducer($data['producerName'])
+            -&gt;setEnergyType($data['energyType'] ?? '')
+            -&gt;setQuantity((float) $data['totalKwh'])
+            -&gt;setPricePerKwh((float) $data['pricePerKwh'])
+            -&gt;setDescription($data['description'] ?? '')
+            -&gt;build();
+    }
+
+    public function buildExpressOffer(string $p, float $kwh, string $type): EnergyOffer
+    {
+        $default = (float) ConfigService::getInstance()-&gt;get('defaultPricePerKwh');
+        return $this-&gt;builder-&gt;reset()-&gt;setProducer($p)-&gt;setEnergyType($type)
+            -&gt;setQuantity($kwh)-&gt;setPricePerKwh($default)-&gt;build();
+    }
+}
+</code></pre>
+
+<p><strong>Dónde se ve en la app y endpoints.</strong></p>
+<ul>
+<li><code>CreateOffer</code> es un <strong>asistente de 6 pasos</strong> (productor, fuente, cantidad, precio,
+  descripción, revisar) que al publicar usa el director.</li>
+<li><code>POST /api/energy/offers</code> (oferta personalizada) y
+  <code>POST /api/energy/offers/express</code> (oferta exprés con precio sugerido).</li>
+<li><code>PredictionPanel</code> también usa el director para convertir un excedente estimado en oferta real.</li>
+</ul>
+<p><strong>Frase de cierre / transición.</strong></p>
+<blockquote>
+<p>“Construir está bien… pero muchas veces queremos <strong>copiar</strong> una oferta parecida.
+Para eso, <em>Prototype</em>.”</p>
+</blockquote>
+<hr />
+<h3 id="55-prototype">5.5 Prototype</h3>
+<p><strong>Idea en una frase.</strong></p>
+<blockquote>
+<p>“En vez de construir desde cero, un objeto <strong>se copia a sí mismo</strong> y entrega un clon
+independiente.”</p>
+</blockquote>
+<p><strong>Problema y solución en el proyecto.</strong>
+Un productor suele publicar ofertas <strong>similares</strong> una y otra vez. Reconstruirlas campo a
+campo es tedioso. Con Prototype se <strong>duplica una oferta existente</strong> o se parte de una
+<strong>plantilla</strong> por tipo de energía (<code>PrototypeRegistry</code>), y se personaliza el clon.</p>
+<p><strong>Participantes y archivos (2 implementaciones).</strong></p>
+<table>
+<thead>
+<tr>
+<th>Capa</th>
+<th>Archivos</th>
+<th>Rol</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Backend</td>
+<td><code>Prototype.php</code>, <code>OfferPrototype.php</code>, <code>PrototypeRegistry.php</code></td>
+<td>Interfaz + prototipo + registro</td>
+</tr>
+<tr>
+<td>Frontend</td>
+<td><code>Prototype.ts</code>, <code>OfferPrototype.ts</code>, <code>PrototypeRegistry.ts</code></td>
+<td>Interfaz + prototipo + registro</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Cómo funciona (clave: clon independiente).</strong></p>
+<p><code>OfferPrototype::copy()</code> genera un <strong>nuevo objeto</strong> con:
+<code>id = null</code>, <code>availableKwh = totalKwh</code> (stock reiniciado) y <code>createdAt = ''</code>. Modificar el
+clon <strong>no afecta</strong> al original. El <code>PrototypeRegistry</code> (Singleton) guarda <strong>plantillas base
+por tipo</strong> (sembradas con <code>EnergySourceFactory</code> + <code>ConfigService</code>) y devuelve una <strong>copia</strong>,
+nunca la plantilla almacenada.</p>
+<p><strong>Código clave (backend):</strong></p>
+<pre class="codehilite"><code class="language-php">interface Prototype { public function copy(): Prototype; }
+
+class OfferPrototype implements Prototype
+{
+    public function __construct(private EnergyOffer $offer) {}
+
+    public function copy(): Prototype
+    {
+        $copy = clone $this-&gt;offer;          // copia profunda del modelo
+        $copy-&gt;id = null;                    // el clon es un objeto nuevo
+        $copy-&gt;availableKwh = $copy-&gt;totalKwh;
+        $copy-&gt;createdAt = '';
+        return new self($copy);
+    }
+}
+</code></pre>
+
+<p><strong>Dónde se ve en la app y endpoints.</strong></p>
+<ul>
+<li><code>POST /api/energy/offers/{id}/clone</code> → duplica una oferta existente.</li>
+<li><code>GET /api/energy/prototype-templates</code> → lista las plantillas del registro.</li>
+<li><code>POST /api/energy/offers/clone-template</code> → crea una oferta clonando una plantilla.</li>
+<li>En <code>EnergyDashboard</code> el botón <strong>“Duplicar oferta”</strong> clona; <code>OfferPrototypePanel</code> muestra
+  el clon <strong>local (TS)</strong> y la publicación del clon en el backend.</li>
+</ul>
+<p><strong>Frase de cierre / transición.</strong></p>
+<blockquote>
+<p>“Del mercado pasamos al <strong>mundo físico simulado</strong>: dispositivos que hablan distinto.
+Para unificarlos, el <em>Adapter</em>.”</p>
+</blockquote>
+<hr />
+<h3 id="56-adapter">5.6 Adapter</h3>
+<p><strong>Idea en una frase.</strong></p>
+<blockquote>
+<p>“Convierte la interfaz incompatible de una clase en <strong>la interfaz que el cliente espera</strong>.”</p>
+</blockquote>
+<p><strong>Problema y solución en el proyecto.</strong>
+El subsistema IoT conecta dispositivos <strong>heredados y heterogéneos</strong> (medidores SCADA con
+registros de texto y inversores fotovoltaicos con payloads JSON). El resto del sistema no
+debe conocer esos formatos: los <strong>adaptadores</strong> los traducen a una interfaz común
+(<code>DeviceGateway</code>), con un modelo común (<code>DeviceTelemetry</code>).</p>
+<p><strong>Participantes y archivos (2 implementaciones).</strong></p>
+<table>
+<thead>
+<tr>
+<th>Capa</th>
+<th>Archivos</th>
+<th>Rol</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Backend</td>
+<td><code>Adapters/DeviceGateway.php</code>, <code>LegacyScadaAdapter.php</code>, <code>PvInverterAdapter.php</code>, <code>DeviceGatewayRegistry.php</code>, <code>DeviceMonitorService.php</code></td>
+<td>Interfaces + adaptadores + cliente</td>
+</tr>
+<tr>
+<td>Frontend</td>
+<td><code>adapter/DeviceGateway.ts</code>, <code>InverterGatewayAdapter.ts</code>, <code>ScadaGatewayAdapter.ts</code>, <code>deviceGatewayRegistry.ts</code></td>
+<td>Mismo patrón en el navegador</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Cómo funciona.</strong></p>
+<ul>
+<li><strong>Target (lo que el cliente conoce):</strong> <code>DeviceGateway</code> → <code>getProviderKey()</code>,
+  <code>getDeviceId()</code>, <code>getDisplayName()</code>, <code>isOnline()</code>, <code>getSupportedMetrics()</code>, <code>readTelemetry()</code>.</li>
+<li><strong>Adaptees (lo viejo):</strong> <code>LegacyScadaMeter</code> (registros crudos) y <code>PvInverterDevice</code> (JSON crudo).</li>
+<li><strong>Adapters:</strong> traducen cada formato a <code>DeviceTelemetry</code>.</li>
+<li><strong>Cliente:</strong> <code>DeviceMonitorService</code> solo conoce <code>DeviceGateway</code> → lista dispositivos,
+  lee telemetría y calcula un resumen consolidado.</li>
+</ul>
+<p><strong>Dónde se ve en la app y endpoints.</strong></p>
+<table>
+<thead>
+<tr>
+<th>Endpoint</th>
+<th>Qué muestra</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /api/energy/legacy/meters</code></td>
+<td>Datos <strong>crudos</strong> del SCADA (el “antes”)</td>
+</tr>
+<tr>
+<td><code>GET /api/energy/legacy/inverters</code></td>
+<td>Payload <strong>crudo</strong> del inversor</td>
+</tr>
+<tr>
+<td><code>GET /api/energy/devices</code></td>
+<td>Inventario <strong>normalizado</strong> (el “después”)</td>
+</tr>
+<tr>
+<td><code>GET /api/energy/devices/{id}/telemetry</code></td>
+<td>Telemetría traducida</td>
+</tr>
+<tr>
+<td><code>GET /api/energy/devices/telemetry/summary</code></td>
+<td>Consolidado (total kW, kWh, por fabricante)</td>
+</tr>
+</tbody>
+</table>
+<p><code>DevicePanel</code> muestra lado a lado los datos crudos y los adaptados.</p>
+<p><strong>Frase de cierre / transición.</strong></p>
+<blockquote>
+<p>“Con los datos ya unificados, hay que <strong>facturarlos</strong> en distintos perfiles y monedas.
+El <em>Bridge</em> separa esas dos dimensiones.”</p>
+</blockquote>
+<hr />
+<h3 id="57-bridge">5.7 Bridge</h3>
+<p><strong>Idea en una frase.</strong></p>
+<blockquote>
+<p>“Separa una <strong>abstracción</strong> de su <strong>implementación</strong> para que ambas varíen
+independientemente, evitando una explosión de clases.”</p>
+</blockquote>
+<p><strong>Problema y solución en el proyecto.</strong>
+La liquidación de energía depende de <strong>dos ejes independientes</strong>: el <strong>perfil</strong> del usuario
+(residencial/comercial) y la <strong>moneda</strong> (COP/USD/EUR). Sin Bridge tendríamos 2 × 3 = 6 clases
+(una por combinación) y crecería de forma multiplicativa. Con Bridge:</p>
+<ul>
+<li><strong>Abstracción:</strong> <code>EnergyBill</code> (<code>ResidentialBill</code>, <code>CommercialBill</code>) → reglas del perfil.</li>
+<li><strong>Implementador:</strong> <code>CurrencyBridge</code> (<code>CopCurrency</code>, <code>UsdCurrency</code>, <code>EurCurrency</code>) → formato,
+  IVA, conversión y unidades mínimas.</li>
+<li><code>SettlementService</code> conecta ambos ejes dinámicamente.</li>
+</ul>
+<p><strong>Participantes y archivos (2 implementaciones).</strong></p>
+<table>
+<thead>
+<tr>
+<th>Capa</th>
+<th>Archivos</th>
+<th>Rol</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Backend</td>
+<td><code>Bridges/EnergyBill.php</code> (abstracta), <code>ResidentialBill.php</code>, <code>CommercialBill.php</code>, <code>CurrencyBridge.php</code> (interfaz), <code>Cop/Usd/EurCurrency.php</code>, <code>SettlementService.php</code></td>
+<td>Abstracción + implementadores + cliente</td>
+</tr>
+<tr>
+<td>Frontend</td>
+<td><code>bridge/EnergyBill.ts</code>, <code>ResidentialBill.ts</code>, <code>CommercialBill.ts</code>, <code>CurrencyBridge.ts</code>, <code>Cop/Usd/EurCurrency.ts</code>, <code>SettlementService.ts</code></td>
+<td>Mismo patrón</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Cómo funciona.</strong></p>
+<pre class="codehilite"><code>        Abstracción                         Implementador
+   ┌───────────────┐                    ┌──────────────────┐
+   │  EnergyBill   │ ─── usa ─────────▶ │  CurrencyBridge  │
+   └───────▲───────┘                    └────────▲─────────┘
+   ┌───────┴───────┐                    ┌────────┴─────────┐
+   │ResidentialBill│                    │Cop / Usd / Eur   │
+   │CommercialBill │                    └──────────────────┘
+   └───────────────┘
+        Perfil (reglas)                 Moneda (formato/IVA)
+</code></pre>
+
+<p><code>EnergyBill::build()</code> calcula el subtotal, aplica las reglas del perfil y <strong>todo lo
+monetario</strong> (IVA, formato, decimales) se lo pide al implementador de moneda.</p>
+<p><strong>Código clave:</strong></p>
+<pre class="codehilite"><code class="language-php">abstract class EnergyBill {
+    public function __construct(protected CurrencyBridge $currency) {}
+    abstract protected function applyProfileRules(float $subtotal, array $data): array;
+}
+
+class CommercialBill extends EnergyBill {
+    applyProfileRules($subtotal, $data): array {
+        $flatFee = $this-&gt;currency-&gt;convertFromUsd(25.0);   // 97.500 COP | 25 USD | 23 EUR
+        return [ /* recargo 2% + tarifa fija */ ];
+    }
+}
+</code></pre>
+
+<p><strong>Dónde se ve en la app y endpoints.</strong></p>
+<ul>
+<li><code>GET /api/energy/settlements/matrix</code> → matriz perfiles × monedas (2 × 3 = 6 combinaciones).</li>
+<li><code>POST /api/energy/settlements/quote</code> → emite la liquidación en la moneda y perfil pedidos.</li>
+<li><code>SettlementPanel</code> deja cambiar perfil y moneda por separado y compara cálculo local vs backend.</li>
+</ul>
+<p><strong>Frase de cierre / transición.</strong></p>
+<blockquote>
+<p>“La liquidación da un precio base; para <strong>añadir extras</strong> sin tocar ese base, el <em>Decorator</em>.”</p>
+</blockquote>
+<hr />
+<h3 id="58-decorator">5.8 Decorator</h3>
+<p><strong>Idea en una frase.</strong></p>
+<blockquote>
+<p>“Añade <strong>responsabilidades a un objeto dinámicamente</strong>, envolviéndolo, en lugar de crear
+una clase por cada combinación.”</p>
+</blockquote>
+<p><strong>Problema y solución en el proyecto.</strong>
+Una oferta puede llevar extras opcionales: <strong>certificación verde (+5%)</strong>, <strong>seguro (+3%)</strong>
+y <strong>entrega prioritaria (+$8.000 COP)</strong>. Con 3 extras hay 2³ = 8 combinaciones; crear una
+clase por combinación sería inviable. El Decorator permite <strong>envolver</strong> una oferta base con
+uno o varios decoradores, en cualquier orden y cantidad.</p>
+<p><strong>Participantes y archivos (2 implementaciones).</strong></p>
+<table>
+<thead>
+<tr>
+<th>Capa</th>
+<th>Archivos</th>
+<th>Rol</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Backend</td>
+<td><code>Decorators/OfferComponent.php</code> (interfaz), <code>BasicOffer.php</code>, <code>OfferDecorator.php</code>, <code>GreenCertificationDecorator.php</code>, <code>InsuranceDecorator.php</code>, <code>PriorityDeliveryDecorator.php</code>, <code>OfferPricingService.php</code></td>
+<td>Componente + decoradores + cliente</td>
+</tr>
+<tr>
+<td>Frontend</td>
+<td><code>decorator/</code> (mismos nombres) + <code>OfferExtrasPanel.tsx</code></td>
+<td>Mismo patrón</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Cómo funciona.</strong></p>
+<pre class="codehilite"><code>OfferComponent (interfaz)
+      ▲                    ▲
+      │                    │ extiende
+  BasicOffer         OfferDecorator (abstracto, envuelve otro OfferComponent)
+                            ▲            ▲            ▲
+                     Green(+5%)   Insurance(+3%)   Priority(+$8.000)
+</code></pre>
+
+<p>Cada decorador <strong>delega</strong> en el componente que envuelve y <strong>añade</strong> su ajuste a la descripción
+y al total. <code>OfferPricingService</code> es el cliente que aplica los extras solicitados.</p>
+<p><strong>Código clave:</strong></p>
+<pre class="codehilite"><code class="language-php">$offer = new BasicOffer(20, 500);                   // 20 kWh × 500 = 10.000
+$offer = new GreenCertificationDecorator($offer);   // +5%  → 10.500
+$offer = new PriorityDeliveryDecorator($offer);     // +8.000 → 18.500
+echo $offer-&gt;getTotal();                            // 18500
+</code></pre>
+
+<p><strong>Dónde se ve en la app y endpoints.</strong></p>
+<ul>
+<li><code>GET /api/energy/extras</code> → catálogo de decoradores disponibles.</li>
+<li><code>POST /api/energy/offers/quote-extras</code> → cotiza una oferta decorada.</li>
+<li><code>OfferExtrasPanel</code>: marcas/desmarcas extras y el precio se recompone; se compara el total
+  local (TS) con el del backend (PHP).</li>
+</ul>
+<p><strong>Frase de cierre / transición.</strong></p>
+<blockquote>
+<p>“Con las ofertas decoradas, ya podemos <strong>agruparlas en paquetes</strong>: el <em>Composite</em>.”</p>
+</blockquote>
+<hr />
+<h3 id="59-composite">5.9 Composite</h3>
+<p><strong>Idea en una frase.</strong></p>
+<blockquote>
+<p>“Compón objetos en <strong>estructuras de árbol</strong> y trátalos igual (hoja o contenedor) para
+calcular totales de forma <strong>recursiva</strong>.”</p>
+</blockquote>
+<p><strong>Problema y solución en el proyecto.</strong>
+Un <strong>paquete de energía</strong> puede contener ofertas individuales <strong>u otros paquetes</strong> (anidados).
+El cliente no debería preocuparse por si un nodo es hoja o grupo: ambos implementan
+<code>BundleComponent</code> y los totales de kWh y precio se <strong>suman recursivamente</strong> sobre el subárbol.</p>
+<p><strong>Participantes y archivos (2 implementaciones).</strong></p>
+<table>
+<thead>
+<tr>
+<th>Capa</th>
+<th>Archivos</th>
+<th>Rol</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Backend</td>
+<td><code>Composite/BundleComponent.php</code> (interfaz), <code>OfferLeaf.php</code> (hoja), <code>EnergyBundle.php</code> (compuesto), <code>BundleService.php</code></td>
+<td>Interfaz + hoja + compuesto + cliente</td>
+</tr>
+<tr>
+<td>Frontend</td>
+<td><code>composite/</code> (mismos nombres) + <code>BundlePanel.tsx</code></td>
+<td>Mismo patrón</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Cómo funciona.</strong></p>
+<pre class="codehilite"><code>BundleComponent (interfaz: getTotalKwh, getTotalPrice, countLeaves, getChildren)
+      ▲                              ▲
+  OfferLeaf                      EnergyBundle
+  (1 oferta: suma la suya)       (N hijos: suma la de TODOS, recursivamente)
+</code></pre>
+
+<p><strong>Código clave:</strong></p>
+<pre class="codehilite"><code class="language-php">$solar = new EnergyBundle('Paquete Solar');
+$solar-&gt;add(new OfferLeaf('Paneles techo', 15, 480, 'solar'))
+      -&gt;add(new OfferLeaf('Excedente patio', 5, 500, 'solar'));
+
+$market = new EnergyBundle('Paquete del Mercado');
+$market-&gt;add($solar)-&gt;add($renewable);
+
+echo $market-&gt;getTotalPrice();   // se calcula solo, sin importar la profundidad
+</code></pre>
+
+<p><strong>Dónde se ve en la app y endpoints.</strong></p>
+<ul>
+<li><code>GET /api/energy/bundles/sample</code> → árbol de ejemplo con totales recursivos.</li>
+<li><code>POST /api/energy/bundles/evaluate</code> → evalúa un árbol JSON (cada nodo <code>type: "offer"</code> o <code>"bundle"</code>).</li>
+<li><code>BundlePanel</code> dibuja el árbol, permite <strong>añadir ofertas</strong> al paquete raíz (los totales se
+  recalculan) y <strong>comparar</strong> con el cálculo del backend.</li>
+</ul>
+<p><strong>Frase de cierre / transición.</strong></p>
+<blockquote>
+<p>“Ya tenemos muchos subsistemas; para que el cliente no tenga que conocerlos todos,
+ponemos un <em>Facade</em>.”</p>
+</blockquote>
+<hr />
+<h3 id="510-facade">5.10 Facade</h3>
+<p><strong>Idea en una frase.</strong></p>
+<blockquote>
+<p>“Ofrece una <strong>interfaz simplificada y de alto nivel</strong> a un conjunto de subsistemas,
+para que el cliente no tenga que conocerlos ni coordinarlos.”</p>
+</blockquote>
+<p><strong>Problema y solución en el proyecto.</strong>
+Para operaciones simples, el controlador y el frontend tenían que conocer <strong>muchos</strong> servicios:
+<code>MarketService</code>, <code>LoggerService</code>, <code>ConfigService</code>, <code>PredictorFactory</code>, <code>DeviceMonitorService</code>,
+<code>SettlementService</code>, <code>OfferPricingService</code>, <code>BundleService</code>. El Facade expone <strong>5 operaciones
+de negocio</strong> y coordina todo internamente:</p>
+<table>
+<thead>
+<tr>
+<th>Operación</th>
+<th>Qué hace internamente</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>getDashboard()</code></td>
+<td>Mercado + ofertas + IoT + configuración + actividad, en <strong>una sola llamada</strong></td>
+</tr>
+<tr>
+<td><code>publishSurplus()</code></td>
+<td>Construye (Builder), registra, contabiliza y loguea</td>
+</tr>
+<tr>
+<td><code>buyEnergy()</code></td>
+<td>Compra en el mercado <strong>y</strong> emite la liquidación (Bridge)</td>
+</tr>
+<tr>
+<td><code>getSurplusAdvice()</code></td>
+<td>Predicciones (Abstract Method) + contexto real + recomendación</td>
+</tr>
+<tr>
+<td><code>getIoTNetworkStatus()</code></td>
+<td>Inventario (Adapter) + resumen consolidado</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Participantes y archivos (2 implementaciones).</strong></p>
+<table>
+<thead>
+<tr>
+<th>Capa</th>
+<th>Archivo</th>
+<th>Rol</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Backend</td>
+<td><code>Facades/EnergyPlatformFacade.php</code></td>
+<td>Único punto de entrada del servidor</td>
+</tr>
+<tr>
+<td>Frontend</td>
+<td><code>facade/PlatformFacade.ts</code></td>
+<td>Fachada del navegador que delega en <code>EnergyApiService</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Código clave (backend):</strong></p>
+<pre class="codehilite"><code class="language-php">class EnergyPlatformFacade
+{
+    public function __construct()
+    {
+        $this-&gt;market = MarketProxy::getInstance();     // Proxy → MarketService (Singleton)
+        $this-&gt;logger = LoggerService::getInstance();
+        $this-&gt;predictors = new PredictorFactory();
+        $this-&gt;devices = new DeviceMonitorService((new DeviceGatewayRegistry())-&gt;all());
+        $this-&gt;settlements = new SettlementService();
+    }
+
+    public function getDashboard(): array
+    {
+        return [
+            'market' =&gt; $this-&gt;market-&gt;getMarketContext(),
+            'offers' =&gt; /* ofertas disponibles */,
+            'iot'    =&gt; $this-&gt;devices-&gt;getSummary(),
+            'config' =&gt; $this-&gt;config-&gt;getAll(),
+            'activity' =&gt; $this-&gt;logger-&gt;getMetrics(),
+        ];
+    }
+}
+</code></pre>
+
+<p><strong>Dónde se ve en la app y endpoints.</strong></p>
+<ul>
+<li><code>GET /api/energy/platform/dashboard</code> — panel unificado en una sola petición.</li>
+<li><code>POST /api/energy/platform/publish-surplus</code> — publica y contabiliza.</li>
+<li><code>POST /api/energy/platform/buy</code> — compra + liquidación.</li>
+<li><code>GET /api/energy/platform/advice</code> — asesoría (predicción + mercado).</li>
+<li><code>GET /api/energy/platform/iot-status</code> — estado de la red IoT.</li>
+<li><code>PlatformPanel</code> es el cliente de la fachada: una sola llamada trae todo el panel.</li>
+</ul>
+<p><strong>Frase de cierre / transición.</strong></p>
+<blockquote>
+<p>“El Facade coordina datos, pero con muchas ofertas repetiríamos información por todas
+partes. Para <strong>compartirla</strong>, el <em>Flyweight</em>.”</p>
+</blockquote>
+<hr />
+<h3 id="511-flyweight">5.11 Flyweight</h3>
+<p><strong>Idea en una frase.</strong></p>
+<blockquote>
+<p>“Comparte el <strong>estado intrínseco</strong> (lo que se repite) entre muchísimos objetos, dejando
+fuera el <strong>estado extrínseco</strong> (lo que es único de cada uno), para ahorrar memoria.”</p>
+</blockquote>
+<p><strong>Problema y solución en el proyecto.</strong>
+Todas las ofertas de tipo solar comparten el mismo nombre (“Energía Solar”), descripción,
+eficiencia (85%) y color (#f39c12). Si cada oferta guardara/creara esa información,
+duplicaríamos lo mismo miles de veces. Con Flyweight:</p>
+<ul>
+<li><strong>Estado intrínseco (compartido):</strong> descriptor del tipo de energía
+  (nombre, descripción, eficiencia, color; y en el frontend: emoji, imagen, colores).</li>
+<li><strong>Estado extrínseco (único):</strong> productor, kWh, precio, fecha → viven en <code>EnergyOffer</code>.</li>
+</ul>
+<p>El resultado: <strong>3 instancias compartidas</strong> reutilizadas por <strong>todas</strong> las ofertas.</p>
+<p><strong>Participantes y archivos (2 implementaciones).</strong></p>
+<table>
+<thead>
+<tr>
+<th>Capa</th>
+<th>Archivo</th>
+<th>Rol</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Backend</td>
+<td><code>app/Patterns/Flyweights/EnergySourceFlyweightFactory.php</code></td>
+<td>Pool de flyweights (una instancia por tipo)</td>
+</tr>
+<tr>
+<td>Frontend</td>
+<td><code>frontend/src/patterns/flyweight/EnergyTypeFlyweightFactory.ts</code></td>
+<td>Descriptores visuales compartidos</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Cómo funciona.</strong></p>
+<ul>
+<li>La fábrica del flyweight mantiene un <strong>pool</strong> <code>tipo → instancia</code>.</li>
+<li>Se <strong>siembra</strong> una vez usando <code>EnergySourceFactory</code> (Factory Method) y luego <strong>se reutiliza</strong>.</li>
+<li>Cada uso se cuenta (<code>totalUses</code>), lo que permite calcular las <strong>instancias ahorradas</strong>
+  (<code>savedInstances = totalUses − instanciasCompartidas</code>).</li>
+<li>En la lista de ofertas, cada oferta se <strong>enriquece</strong> con el descriptor compartido
+  (<code>energySource</code>), en lugar de repetir esos datos.</li>
+</ul>
+<p><strong>Código clave (backend):</strong></p>
+<pre class="codehilite"><code class="language-php">class EnergySourceFlyweightFactory
+{
+    private array $pool = [];   // tipo → EnergySource (compartido)
+
+    private function seedPool(): void   // se crea UNA vez cada descriptor
+    {
+        foreach (EnergySourceFactory::TYPES as $type) {
+            $this-&gt;pool[$type] = (new EnergySourceFactory())-&gt;create($type);
+        }
+    }
+
+    public function get(string $type): EnergySource   // siempre el MISMO objeto
+    {
+        $key = strtolower(trim($type));
+        $this-&gt;metrics['totalUses']++;
+        return $this-&gt;pool[$key] ??= (new EnergySourceFactory())-&gt;create($key);
+    }
+
+    public function describe(string $type): array
+    {
+        return $this-&gt;get($type)-&gt;toArray();   // estado intrínseco compartido
+    }
+}
+</code></pre>
+
+<p><strong>Código clave (frontend):</strong></p>
+<pre class="codehilite"><code class="language-typescript">const descriptor = energyTypeFlyweightFactory.get(offer.energyType);
+// → MISMO objeto { name: 'Energia Solar', image: '/images/solar-energy.svg',
+//                  color: '#f39c12', emoji: '☀️', ... } para todas las ofertas solares
+</code></pre>
+
+<p><strong>Dónde se ve en la app y endpoints.</strong></p>
+<ul>
+<li><code>GET /api/energy/flyweight-stats</code> → <code>createdInstances</code>, <code>totalUses</code>, <code>savedInstances</code>,
+  <code>usesByType</code> y los descriptores compartidos.</li>
+<li><code>GET /api/energy/offers</code> devuelve cada oferta con su <code>energySource</code> compartido.</li>
+<li><code>EnergyDashboard</code> usa el flyweight para la imagen y la etiqueta del tipo, <strong>sin funciones
+  duplicadas</strong> (antes había <code>switch</code> repetidos en 3 componentes).</li>
+<li><code>PatternsPanel</code> muestra en vivo los descriptores compartidos y los usos.</li>
+</ul>
+<p><strong>Frase de cierre / transición.</strong></p>
+<blockquote>
+<p>“Ya compartimos lo que se repite; ahora falta <strong>controlar el acceso</strong> al mercado y no
+repetir consultas costosas: el <em>Proxy</em>.”</p>
+</blockquote>
+<hr />
+<h3 id="512-proxy">5.12 Proxy</h3>
+<p><strong>Idea en una frase.</strong></p>
+<blockquote>
+<p>“Es un <strong>sustituto</strong> con la misma interfaz que el objeto real, que <strong>controla el acceso</strong>:
+puede cachear, crear de forma diferida o proteger (autorizar/limitar).”</p>
+</blockquote>
+<p><strong>Problema y solución en el proyecto.</strong>
+Consultar el mercado en cada petición es costoso y, además, las compras necesitan reglas de
+seguridad. El <strong>Proxy</strong> envuelve al servicio real con tres facetas:</p>
+<ol>
+<li><strong>Proxy virtual:</strong> el objeto real (<code>MarketService</code>) se crea <strong>solo cuando se necesita</strong>.</li>
+<li><strong>Proxy de caché:</strong> guarda la lista de ofertas durante un <strong>TTL</strong> (10 s) y la <strong>invalida</strong>
+   al publicar, clonar o comprar; así evita recorrer el mercado en cada lectura.</li>
+<li><strong>Proxy de protección:</strong> valida las compras contra <code>ConfigService</code>
+   (<strong>mínimo 1 kWh, máximo 100 kWh</strong>) y <strong>bloquea</strong> las que no cumplen la política.</li>
+</ol>
+<p><strong>Participantes y archivos (2 implementaciones).</strong></p>
+<table>
+<thead>
+<tr>
+<th>Capa</th>
+<th>Archivo</th>
+<th>Rol</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Backend</td>
+<td><code>app/Patterns/Proxies/MarketProxy.php</code></td>
+<td>Sustituto de <code>MarketService</code> (virtual + caché + protección)</td>
+</tr>
+<tr>
+<td>Frontend</td>
+<td><code>frontend/src/patterns/proxy/EnergyApiProxy.ts</code></td>
+<td>Sustituto de <code>EnergyApiService</code> (caché TTL + protección)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Cómo funciona (backend).</strong></p>
+<pre class="codehilite"><code class="language-php">class MarketProxy
+{
+    private ?MarketService $real = null;    // Proxy virtual: se crea bajo demanda
+
+    private function real(): MarketService
+    {
+        return $this-&gt;real ??= MarketService::getInstance();
+    }
+
+    public function getAvailableOffers(): array
+    {
+        if ($this-&gt;isCacheValid()) {          // Proxy de caché
+            return $this-&gt;fromCache();        // no toca el sujeto real
+        }
+        $offers = array_values($this-&gt;real()-&gt;getAvailableOffers());
+        $this-&gt;writeCache($offers);           // guarda con TTL
+        return $offers;
+    }
+
+    public function purchaseOffer(int $id, int $kwh): array
+    {
+        if ($kwh &lt; 1)   return $this-&gt;blocked('la compra mínima es 1 kWh');
+        if ($kwh &gt; 100) return $this-&gt;blocked('máximo 100 kWh por operación');
+
+        $result = $this-&gt;real()-&gt;purchaseOffer($id, $kwh);   // Proxy de protección superado
+        if ($result['success']) $this-&gt;invalidateCache();    // coherencia de la caché
+        return $result;
+    }
+}
+</code></pre>
+
+<p><strong>Cómo funciona (frontend).</strong>
+<code>EnergyApiProxy</code> envuelve a <code>EnergyApiService</code> (Singleton): cachea las ofertas 10 s y
+valida la compra (1–100 kWh) antes de llamar al backend; al comprar con éxito, invalida su caché.</p>
+<p><strong>Dónde se ve en la app y endpoints.</strong></p>
+<ul>
+<li><code>GET /api/energy/proxy-stats</code> → <code>ttlSeconds</code>, <code>valid</code>, <code>entries</code>, <code>expiresIn</code> y política.</li>
+<li><code>EnergyDashboard</code> obtiene las ofertas a través del Proxy (con caché y por envío por
+  <code>EnergyApiService</code>), y las compras pasan por la validación.</li>
+<li><code>PatternsPanel</code> muestra la caché (válida/expirada, entradas, TTL) y permite
+  <strong>forzar la invalidación</strong>.</li>
+<li>Demo rápida: pedir <code>/offers</code> dos veces → el Proxy reporta caché válida; intentar comprar
+  <strong>999 kWh</strong> → el Proxy responde “no se pueden comprar más de 100 kWh por operación”.</li>
+</ul>
+<p><strong>Frase de cierre.</strong></p>
+<blockquote>
+<p>“Con esto cerramos el ciclo: compartimos información (Flyweight) y controlamos el acceso
+(Proxy), sobre una arquitectura donde cada patrón resuelve un problema concreto.”</p>
+</blockquote>
+<hr />
+<h2 id="6-demo-en-vivo-paso-a-paso">6. Demo en vivo paso a paso</h2>
+<blockquote>
+<p>Orden recomendado para que un patrón “prepare” el siguiente. Ten abiertas dos pestañas:
+la <strong>app</strong> (frontend) y una terminal para <code>curl</code>.</p>
+</blockquote>
+<p><strong>Preparación (antes de exponer):</strong></p>
+<pre class="codehilite"><code class="language-bash"># Terminal 1 — backend
+cd backend-laravel &amp;&amp; php artisan serve --port=8000
+
+# Terminal 2 — frontend
+cd frontend &amp;&amp; npm run dev        # http://localhost:5173
+</code></pre>
+
+<p><strong>Recorrido sugerido (≈5 minutos):</strong></p>
+<table>
+<thead>
+<tr>
+<th>Paso</th>
+<th>Acción en pantalla</th>
+<th>Qué señalar</th>
+<th>Patrón</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Sección <strong>Mercado</strong>, paso 2 del asistente</td>
+<td>Tarjetas de energía (solar/eólica/hidráulica)</td>
+<td>Factory Method</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Publicar una oferta (6 pasos)</td>
+<td>El asistente construye la oferta</td>
+<td>Builder</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Sección <strong>Análisis</strong> → “Calcular local” y “Consultar backend”</td>
+<td>Misma predicción en TS y PHP</td>
+<td>Abstract Method</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Botón <strong>Duplicar oferta</strong> en una tarjeta</td>
+<td>Clon independiente</td>
+<td>Prototype</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Sección <strong>Plantillas</strong></td>
+<td>Clonar una plantilla</td>
+<td>Prototype</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Sección <strong>Dispositivos</strong></td>
+<td>Datos crudos vs normalizados</td>
+<td>Adapter</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Sección <strong>Calcular liquidación</strong></td>
+<td>Cambiar perfil y moneda por separado</td>
+<td>Bridge</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Sección <strong>Opciones de oferta</strong></td>
+<td>Marcar extras y ver el total recomponerse</td>
+<td>Decorator</td>
+</tr>
+<tr>
+<td>9</td>
+<td>Sección <strong>Paquetes de energía</strong></td>
+<td>Añadir oferta y ver totales recursivos</td>
+<td>Composite</td>
+</tr>
+<tr>
+<td>10</td>
+<td>Sección <strong>Plataforma</strong></td>
+<td>Una sola llamada trae todo el panel</td>
+<td>Facade</td>
+</tr>
+<tr>
+<td>11</td>
+<td>Sección <strong>Flyweight y Proxy</strong></td>
+<td>Descriptores compartidos + estado de caché</td>
+<td>Flyweight + Proxy</td>
+</tr>
+<tr>
+<td>12</td>
+<td>Terminal: compra 999 kWh</td>
+<td>El Proxy rechaza la operación</td>
+<td>Proxy</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Comandos <code>curl</code> de la demo (terminal):</strong></p>
+<pre class="codehilite"><code class="language-bash">B=http://localhost:8000/api/energy
+
+# 1) Ofertas (Proxy + Flyweight: cada oferta trae su descriptor compartido)
+curl $B/offers
+
+# 2) Flyweight: instancias compartidas vs usos
+curl $B/flyweight-stats
+
+# 3) Proxy: caché válida con TTL
+curl $B/proxy-stats
+curl $B/offers &gt; /dev/null &amp;&amp; curl $B/offers &gt; /dev/null
+curl $B/proxy-stats                      # ahora &quot;valid&quot;: true
+
+# 4) Proxy de protección: compra bloqueada
+curl -X POST $B/offers/1/purchase -H &quot;Content-Type: application/json&quot; -d '{&quot;kwh&quot;:999}'
+
+# 5) Facade: panel unificado
+curl $B/platform/dashboard
+
+# 6) Predicción (Abstract Method)
+curl &quot;$B/predictions?production=30&amp;consumption=50&quot;
+</code></pre>
+
+<p><strong>Qué decir en cada paso (una línea):</strong> el proyecto está pensado para que <strong>cada patrón sea
+visible en pantalla</strong>, no solo en el código: las tarjetas (Factory), el asistente (Builder),
+los clones (Prototype), los dispositivos (Adapter), la factura (Bridge), los extras
+(Decorator), los paquetes (Composite), el panel unificado (Facade), el panel de patrones
+(Flyweight + Proxy).</p>
+<hr />
+<h2 id="7-comparaciones-que-suelen-preguntar">7. Comparaciones que suelen preguntar</h2>
+<table>
+<thead>
+<tr>
+<th>Comparación</th>
+<th>Diferencia esencial</th>
+<th>En este proyecto</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Factory Method vs Builder</strong></td>
+<td>Factory: decide <strong>qué</strong> clase crear en un paso. Builder: construye <strong>paso a paso</strong> un objeto complejo.</td>
+<td><code>EnergySourceFactory</code> (tipo → clase) vs <code>EnergyOfferBuilder</code>+<code>OfferDirector</code> (oferta por pasos)</td>
+</tr>
+<tr>
+<td><strong>Builder vs Prototype</strong></td>
+<td>Builder construye desde cero; Prototype <strong>copia</strong> un objeto existente.</td>
+<td>Oferta nueva vs <code>cloneOffer</code>/plantilla</td>
+</tr>
+<tr>
+<td><strong>Adapter vs Bridge</strong></td>
+<td>Adapter hace <strong>compatibles</strong> interfaces ya existentes; Bridge <strong>separa</strong> abstracción e implementación diseñadas juntas.</td>
+<td><code>LegacyScadaAdapter</code> vs <code>EnergyBill</code> + <code>CurrencyBridge</code></td>
+</tr>
+<tr>
+<td><strong>Decorator vs Proxy</strong></td>
+<td>Decorator <strong>añade</strong> comportamiento (envuelve y agrega); Proxy <strong>controla el acceso</strong> (misma interfaz, sin añadir al resultado).</td>
+<td>Extras de oferta vs <code>MarketProxy</code> (caché/protección)</td>
+</tr>
+<tr>
+<td><strong>Decorator vs Composite</strong></td>
+<td>Decorator envuelve <strong>uno</strong> y añade; Composite agrupa <strong>muchos</strong> y suma recursivamente.</td>
+<td>Extras vs paquetes de energía</td>
+</tr>
+<tr>
+<td><strong>Facade vs Proxy</strong></td>
+<td>Facade <strong>simplifica</strong> muchos subsistemas (interfaz nueva), Proxy es un sustituto <strong>1 a 1</strong> que controla el acceso.</td>
+<td><code>EnergyPlatformFacade</code> vs <code>MarketProxy</code></td>
+</tr>
+<tr>
+<td><strong>Flyweight vs Singleton</strong></td>
+<td>Singleton: <strong>una</strong> instancia total. Flyweight: <strong>varias</strong> instancias (una por estado intrínseco) compartidas por muchos usuarios.</td>
+<td><code>MarketService</code> vs pool <code>tipo→EnergySource</code></td>
+</tr>
+<tr>
+<td><strong>Flyweight vs Prototype</strong></td>
+<td>Prototype <strong>crea copias</strong> independientes; Flyweight <strong>comparte</strong> objetos sin copiar.</td>
+<td>Clonar oferta vs descriptor compartido por tipo</td>
+</tr>
+<tr>
+<td><strong>Template Method vs Strategy</strong></td>
+<td>Template Method usa <strong>herencia</strong> (esqueleto fijo en la base); Strategy usa <strong>composición</strong> (algoritmo intercambiable).</td>
+<td>Aquí se usó Template Method: <code>AbstractPredictor::predict()</code></td>
+</tr>
+<tr>
+<td><strong>Prototype vs Builder (variantes)</strong></td>
+<td>Prototype clona variantes ya existentes; Builder genera variantes nuevas con pasos.</td>
+<td>Plantillas vs oferta exprés</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="8-preguntas-frecuentes-del-jurado-y-respuestas-modelo">8. Preguntas frecuentes del jurado y respuestas modelo</h2>
+<ol>
+<li>
+<p><strong>¿Por qué usaron Singleton y no una variable global?</strong>
+   Porque el Singleton <strong>controla la creación</strong>, serializa el acceso y mantiene el estado
+   en una sola instancia tipada. Además permite cargar/guardar el estado (JSON) en el
+   constructor privado, cosa que una variable global no hace.</p>
+</li>
+<li>
+<p><strong>¿No es el Singleton un anti-patrón por el acoplamiento global?</strong>
+   Lo es si se abusa. Aquí se usa solo para <strong>servicios de estado compartido</strong> (mercado,
+   logs, config, cliente HTTP). Es un prototipo académico; en producción se inyectarían
+   dependencias (contenedor IoC de Laravel).</p>
+</li>
+<li>
+<p><strong>¿Dónde está el polimorfismo del Factory Method?</strong>
+   En <code>EnergySource</code>: la clase abstracta declara el contrato y <code>SolarEnergy</code>,
+   <code>WindEnergy</code>, <code>HydroEnergy</code> lo implementan. La fábrica devuelve el <strong>tipo base</strong>, y el
+   cliente solo llama métodos de la interfaz.</p>
+</li>
+<li>
+<p><strong>¿Por qué Abstract Method y no Strategy?</strong>
+   Porque el <strong>esqueleto</strong> de la predicción (calcular excedente, acción, recomendación) es
+   común y <strong>fijo</strong>; solo cambian los datos. Eso es exactamente un <strong>Template Method</strong>.</p>
+</li>
+<li>
+<p><strong>¿Qué pasa si añado un tipo de energía nuevo?</strong>
+   Se crea la clase (p. ej. <code>GeothermalEnergy</code>), se registra en <code>EnergySourceFactory::TYPES</code>
+   y en el <code>switch</code> de <code>EnergyCardFactory</code>; el resto del sistema no cambia. Eso demuestra
+   la extensibilidad.</p>
+</li>
+<li>
+<p><strong>¿Cómo prueban que el Builder construye bien la oferta?</strong>
+   El asistente valida cada paso; el builder valida cantidad y precio y delega el tipo en
+   la fábrica (422 si es inválido). El backend responde con la oferta construida y el
+   panel la muestra.</p>
+</li>
+<li>
+<p><strong>¿Cómo garantizan que el clon del Prototype es independiente?</strong>
+   <code>copy()</code> hace <code>clone</code> del modelo y <strong>reinicia</strong> <code>id</code>, <code>availableKwh</code> y <code>createdAt</code>.
+   Modificar el clon no altera el original; el registry devuelve una copia, nunca la plantilla.</p>
+</li>
+<li>
+<p><strong>¿Qué ventaja real dio el Adapter?</strong>
+   Unificar dispositivos con formatos distintos (texto SCADA vs JSON PV) en una sola
+   interfaz y un solo modelo (<code>DeviceTelemetry</code>), de modo que <code>DeviceMonitorService</code> y los
+   paneles no conocen los formatos originales.</p>
+</li>
+<li>
+<p><strong>¿Por qué el Bridge y no herencia múltiple?</strong>
+   PHP no tiene herencia múltiple. El Bridge permite variar <strong>perfil</strong> y <strong>moneda</strong> por
+   separado y evita 6+ clases; añadir una moneda no toca los perfiles.</p>
+</li>
+<li>
+<p><strong>¿Cómo se combinan los decoradores?</strong>
+    Se envuelven unos sobre otros: cada uno delega en el componente envuelto y añade su
+    ajuste. El resultado es la suma acumulada, sin importar el orden.</p>
+</li>
+<li>
+<p><strong>¿Cómo se calculan los totales del Composite?</strong>
+    Recursivamente: <code>getTotalKwh()</code>/<code>getTotalPrice()</code> de un paquete suman las de sus hijos;
+    una hoja devuelve lo suyo. Así el árbol puede anidarse a cualquier profundidad.</p>
+</li>
+<li>
+<p><strong>¿El Facade hace “de todo” o delega?</strong>
+    <strong>Delega y coordina</strong>; no reimplementa. Cada operación compone los subsistemas
+    (Builder, Bridge, Adapter, Abstract Method) y expone un resultado de alto nivel.</p>
+</li>
+<li>
+<p><strong>¿Qué comparte exactamente el Flyweight?</strong>
+    El estado <strong>intrínseco</strong>: descriptor del tipo de energía (nombre, color, eficiencia,
+    imagen). El estado <strong>extrínseco</strong> (productor, kWh, precio) es de cada oferta y no se
+    comparte.</p>
+</li>
+<li>
+<p><strong>¿Cómo demuestran el ahorro del Flyweight?</strong>
+    Con <code>/flyweight-stats</code>: pocas <strong>instancias creadas</strong> frente a muchos <strong>usos</strong>, y el
+    campo <code>savedInstances</code> (instancias que no hubo que crear).</p>
+</li>
+<li>
+<p><strong>¿Qué tres tipos de Proxy implementaron?</strong>
+    Virtual (creación diferida de <code>MarketService</code>), de caché (ofertas con TTL e
+    invalidación) y de protección (límites de compra). Los tres con la <strong>misma interfaz</strong>.</p>
+</li>
+<li>
+<p><strong>¿Qué pasa con la caché cuando alguien compra o publica?</strong>
+    El Proxy la <strong>invalida</strong> en cada mutación (publicar, clonar, comprar). Así se evita
+    servir ofertas desactualizadas.</p>
+</li>
+<li>
+<p><strong>¿Por qué el mismo patrón está en backend y frontend?</strong>
+    Para demostrar el patrón en dos lenguajes y en dos responsabilidades: el backend
+    protege/cachea el <strong>servidor</strong>, el frontend la <strong>red</strong>. Los paneles comparan ambos
+    cálculos (por ejemplo, Decorator y Bridge).</p>
+</li>
+<li>
+<p><strong>¿Dónde persisten los datos?</strong>
+    En archivos JSON dentro de <code>storage/app/</code>: <code>market_data.json</code>, <code>logger_data.json</code>,
+    <code>flyweight_data.json</code>, <code>market_proxy_cache.json</code>. Es una base de datos en memoria
+    persistida, como pide el alcance del proyecto.</p>
+</li>
+<li>
+<p><strong>¿Qué patrón resuelve el objetivo de “clasificar los tipos de energía”?</strong>
+    Factory Method (<code>EnergySourceFactory</code>) al crear/validar tipos, y Flyweight al
+    <strong>compartir</strong> los descriptores de cada tipo.</p>
+</li>
+<li>
+<p><strong>¿Qué mejorarían para producción?</strong>
+    Inyección de dependencias, base de datos real, caché distribuida (Redis), autenticación
+    y autorización reales en el Proxy de protección, y pruebas automatizadas.</p>
+</li>
+</ol>
+<hr />
+<h2 id="9-mapa-de-la-rubrica-y-los-objetivos-del-proyecto">9. Mapa de la rúbrica y los objetivos del proyecto</h2>
+<p><strong>Rúbrica que sigue el README:</strong> cada patrón se documenta con (a) <em>“En qué consiste dentro
+del proyecto”</em>, (b) <strong>diagrama UML</strong>, (c) <strong>código clave/completo</strong>, (d) <strong>integración con
+el resto del sistema</strong> (endpoints, componentes) y (e) se añade al <strong>índice de patrones</strong>.
+Todos los patrones de esta guía cumplen esos cinco puntos en el README.</p>
+<p><strong>Cumplimiento de los objetivos específicos:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Objetivo específico</th>
+<th>Patrones que lo evidencian</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Registrar y gestionar producción/consumo</td>
+<td>Singleton (estado), Abstract Method (predicción)</td>
+</tr>
+<tr>
+<td>Gestionar excedentes disponibles</td>
+<td>Builder, Prototype, Composite, Flyweight</td>
+</tr>
+<tr>
+<td>Clasificar tipos de energía</td>
+<td>Factory Method, Flyweight</td>
+</tr>
+<tr>
+<td>Realizar compras y ventas</td>
+<td>Proxy (protección/caché), Facade (compra + liquidación)</td>
+</tr>
+<tr>
+<td>Registrar y consultar historial</td>
+<td>Singleton (<code>LoggerService</code>, <code>MarketService</code>), Facade</td>
+</tr>
+<tr>
+<td>Predicción de producción/consumo</td>
+<td>Abstract Method / Template Method</td>
+</tr>
+<tr>
+<td>Evaluar con pruebas funcionales</td>
+<td>Endpoints + paneles que comparan local vs backend</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Cobertura por subsistema:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Subsistema</th>
+<th>Patrones principales</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Compra y venta de excedentes</td>
+<td>Singleton, Factory, Builder, Prototype, Facade, Flyweight, Proxy</td>
+</tr>
+<tr>
+<td>Subastas</td>
+<td>(base del mercado) Prototype/Composite como soporte</td>
+</tr>
+<tr>
+<td>Dispositivos IoT</td>
+<td>Adapter</td>
+</tr>
+<tr>
+<td>Predicción</td>
+<td>Abstract Method</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="10-endpoints-y-comandos-utiles">10. Endpoints y comandos útiles</h2>
+<p><strong>Ejecutar el proyecto:</strong></p>
+<pre class="codehilite"><code class="language-bash"># Backend
+cd backend-laravel
+composer install
+php artisan key:generate
+php artisan serve --port=8000
+
+# Frontend
+cd frontend
+npm install
+npm run dev            # http://localhost:5173
+</code></pre>
+
+<p><strong>Endpoints principales por patrón:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Ruta</th>
+<th>Patrón</th>
+<th>Descripción</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/api/energy/source-catalog</code></td>
+<td>Factory Method</td>
+<td>Catálogo de fuentes</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/energy/predictions</code></td>
+<td>Abstract Method</td>
+<td>Predicciones (acepta <code>?production=&amp;consumption=</code>)</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/energy/offers</code></td>
+<td>Builder</td>
+<td>Crear oferta personalizada</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/energy/offers/express</code></td>
+<td>Builder</td>
+<td>Oferta exprés (precio por defecto)</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/energy/offers/{id}/clone</code></td>
+<td>Prototype</td>
+<td>Duplicar oferta</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/energy/prototype-templates</code></td>
+<td>Prototype</td>
+<td>Ver plantillas</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/energy/offers/clone-template</code></td>
+<td>Prototype</td>
+<td>Crear desde plantilla</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/energy/legacy/meters</code></td>
+<td>Adapter</td>
+<td>Datos crudos SCADA</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/energy/legacy/inverters</code></td>
+<td>Adapter</td>
+<td>Payload crudo inversor</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/energy/devices</code></td>
+<td>Adapter</td>
+<td>Inventario normalizado</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/energy/devices/{id}/telemetry</code></td>
+<td>Adapter</td>
+<td>Telemetría traducida</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/energy/devices/telemetry/summary</code></td>
+<td>Adapter</td>
+<td>Resumen IoT</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/energy/settlements/matrix</code></td>
+<td>Bridge</td>
+<td>Perfiles × monedas</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/energy/settlements/quote</code></td>
+<td>Bridge</td>
+<td>Emitir liquidación</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/energy/extras</code></td>
+<td>Decorator</td>
+<td>Catálogo de extras</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/energy/offers/quote-extras</code></td>
+<td>Decorator</td>
+<td>Cotizar con extras</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/energy/bundles/sample</code></td>
+<td>Composite</td>
+<td>Árbol de ejemplo</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/energy/bundles/evaluate</code></td>
+<td>Composite</td>
+<td>Evaluar árbol</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/energy/platform/dashboard</code></td>
+<td>Facade</td>
+<td>Panel unificado</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/energy/platform/publish-surplus</code></td>
+<td>Facade</td>
+<td>Publicar excedente</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/energy/platform/buy</code></td>
+<td>Facade</td>
+<td>Comprar + liquidar</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/energy/platform/advice</code></td>
+<td>Facade</td>
+<td>Asesoría</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/energy/platform/iot-status</code></td>
+<td>Facade</td>
+<td>Estado IoT</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/energy/flyweight-stats</code></td>
+<td>Flyweight</td>
+<td>Métricas del pool</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/energy/proxy-stats</code></td>
+<td>Proxy</td>
+<td>Estado de caché/políticas</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="11-glosario-rapido">11. Glosario rápido</h2>
+<ul>
+<li><strong>Estado intrínseco:</strong> datos que se repiten entre muchos objetos (Flyweight).</li>
+<li><strong>Estado extrínseco:</strong> datos únicos de cada objeto, que no se comparten.</li>
+<li><strong>Cache hit / cache miss:</strong> la petición se sirve desde la caché / hay que ir al origen.</li>
+<li><strong>TTL (Time To Live):</strong> tiempo durante el cual una caché se considera válida.</li>
+<li><strong>Proxy virtual:</strong> retrasa la creación del objeto real hasta que se necesita.</li>
+<li><strong>Proxy de protección:</strong> verifica permisos/reglas antes de permitir la operación.</li>
+<li><strong>Adaptee:</strong> la clase “vieja” que no encaja con la interfaz esperada (Adapter).</li>
+<li><strong>Abstracción / Implementador:</strong> los dos ejes que separa el Bridge.</li>
+<li><strong>Cliente:</strong> quien consume un patrón (controlador, componente React, servicio).</li>
+<li><strong>Componente / Hoja / Compuesto:</strong> los tres roles del Composite.</li>
+<li><strong>Director / Builder:</strong> quien orquesta los pasos y quien los ejecuta (Builder).</li>
+</ul>
+<hr />
+<h2 id="12-checklist-final-antes-de-exponer">12. Checklist final antes de exponer</h2>
+<p><strong>Técnico</strong></p>
+<ul>
+<li>[ ] Backend levantado (<code>php artisan serve</code>) y probado <code>/api/energy/offers</code>.</li>
+<li>[ ] Frontend levantado (<code>npm run dev</code>) y navegado por las 10 secciones.</li>
+<li>[ ] Endpoints nuevos responden: <code>/flyweight-stats</code>, <code>/proxy-stats</code>.</li>
+<li>[ ] Datos de demostración cargados (al menos 3–5 ofertas de distintos tipos).</li>
+</ul>
+<p><strong>De contenido</strong></p>
+<ul>
+<li>[ ] Puedo decir la <strong>idea en una frase</strong> de los 12 patrones sin leer.</li>
+<li>[ ] Sé <strong>por qué</strong> cada patrón está en el proyecto (problema que resuelve).</li>
+<li>[ ] Puedo señalar <strong>el archivo</strong> de cada patrón y leer un fragmento clave.</li>
+<li>[ ] Tengo preparadas las <strong>comparaciones</strong> (sección 7).</li>
+<li>[ ] Tengo preparadas las <strong>FRASES de transición</strong> entre patrones.</li>
+</ul>
+<p><strong>De la demo</strong></p>
+<ul>
+<li>[ ] Ensayé el recorrido de la sección 6 en orden.</li>
+<li>[ ] Sé qué decir al mostrar la compra bloqueada por el Proxy (999 kWh).</li>
+<li>[ ] Sé mostrar la caché pasando de “no válida” a “válida” con dos llamadas a <code>/offers</code>.</li>
+</ul>
+<p><strong>Cierre</strong></p>
+<ul>
+<li>[ ] Cierro recordando que hay <strong>12 patrones × 2 capas</strong>, documentados en el README con
+      UML, código e integración, y que cada patrón resuelve un problema <strong>real</strong> del proyecto.</li>
+</ul>
+<hr />
+<p><em>Fin de la guía. ¡Éxito en la exposición!</em></p>
+</body></html>

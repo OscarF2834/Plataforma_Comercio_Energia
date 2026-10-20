@@ -15,20 +15,19 @@ use App\Patterns\Factories\EnergySourceFactory;
  * fecha) vive fuera, en cada EnergyOffer.
  *
  * De esta forma, cientos de ofertas reutilizan 3 instancias en lugar de
- * instanciar un descriptor nuevo por cada consulta.
+ * instanciar un descriptor nuevo por cada oferta.
  */
 class EnergySourceFlyweightFactory
 {
     private static ?EnergySourceFlyweightFactory $instance = null;
 
-    /** @var array<string, EnergySource> Pool de flyweights compartidos por tipo. */
+    /** @var array<string, EnergySource> Pool de flyweights canonicos por tipo. */
     private array $pool = [];
 
     private string $dataFile;
 
-    /** @var array{createdInstances:int,totalUses:int,usesByType:array<string,int>} */
+    /** @var array{totalUses:int,usesByType:array<string,int>} */
     private array $metrics = [
-        'createdInstances' => 0,
         'totalUses' => 0,
         'usesByType' => [],
     ];
@@ -37,6 +36,7 @@ class EnergySourceFlyweightFactory
     {
         $this->dataFile = storage_path('app/flyweight_data.json');
         $this->load();
+        $this->seedPool();
     }
 
     public static function getInstance(): self
@@ -45,6 +45,19 @@ class EnergySourceFlyweightFactory
             self::$instance = new self();
         }
         return self::$instance;
+    }
+
+    /**
+     * Crea los flyweights canonicos UNA vez apoyandose en el Factory Method
+     * (EnergySourceFactory). A partir de aqui siempre se comparten.
+     */
+    private function seedPool(): void
+    {
+        foreach (EnergySourceFactory::TYPES as $type) {
+            if (!isset($this->pool[$type])) {
+                $this->pool[$type] = (new EnergySourceFactory())->create($type);
+            }
+        }
     }
 
     private function load(): void
@@ -64,21 +77,19 @@ class EnergySourceFlyweightFactory
     }
 
     /**
-     * Devuelve el flyweight COMPARTIDO del tipo pedido.
-     * En un cache miss delega la creacion en el Factory Method
-     * (EnergySourceFactory) una UNICA vez por tipo.
+     * Devuelve el flyweight COMPARTIDO del tipo pedido. Si el tipo no
+     * pertenece al catalogo base se delega en el Factory Method.
      */
     public function get(string $type): EnergySource
     {
         $key = strtolower(trim($type));
 
         if (!isset($this->pool[$key])) {
-            // Cache miss: la fabrica crea el flyweight una sola vez.
+            // Tipo fuera del catalogo base: se crea y se comparte tambien.
             $this->pool[$key] = (new EnergySourceFactory())->create($key);
-            $this->metrics['createdInstances']++;
         }
 
-        // Cache hit: se reutiliza la instancia compartida.
+        // Cada uso reutiliza la MISMA instancia (cache hit del pool).
         $this->metrics['totalUses']++;
         $this->metrics['usesByType'][$key] = ($this->metrics['usesByType'][$key] ?? 0) + 1;
         $this->save();
@@ -92,12 +103,15 @@ class EnergySourceFlyweightFactory
         return $this->get($type)->toArray();
     }
 
-    /** Metricas del pool: instancias creadas vs. usos acumulados. */
+    /** Metricas del pool: instancias compartidas vs. usos acumulados. */
     public function getStats(): array
     {
+        $shared = count($this->pool);
+
         return [
-            'createdInstances' => $this->metrics['createdInstances'],
+            'createdInstances' => $shared,
             'totalUses' => $this->metrics['totalUses'],
+            'savedInstances' => max(0, $this->metrics['totalUses'] - $shared),
             'usesByType' => $this->metrics['usesByType'],
             'sharedTypes' => array_values(array_map(
                 fn (EnergySource $source) => [
@@ -107,8 +121,8 @@ class EnergySourceFlyweightFactory
                 ],
                 $this->pool
             )),
-            'note' => 'Sin Flyweight, cada consulta instanciaria un descriptor nuevo por oferta. '
-                . 'Con Flyweight, N usos reutilizan una sola instancia por tipo.',
+            'note' => 'Sin Flyweight, cada uso crearia una instancia nueva (1 por oferta/consulta). '
+                . 'Con Flyweight, todos los usos comparten las mismas instancias del pool (una por tipo).',
         ];
     }
 }
