@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Patterns\MarketService;
 use App\Patterns\LoggerService;
 use App\Patterns\ConfigService;
 use App\Patterns\Facades\EnergyPlatformFacade;
@@ -22,7 +21,6 @@ use Illuminate\Http\Request;
 
 class EnergyController extends Controller
 {
-    private MarketService $market;
     private MarketProxy $marketProxy;
     private EnergySourceFlyweightFactory $sourceFlyweights;
     private LoggerService $logger;
@@ -38,10 +36,9 @@ class EnergyController extends Controller
 
     public function __construct()
     {
-        $this->market = MarketService::getInstance();
-
         // Patron Proxy: el MarketProxy sustituye al MarketService y controla
-        // el acceso (caché de ofertas + protección de compras).
+        // el acceso (caché de ofertas + protección de compras). Internamente
+        // el Proxy crea el MarketService (Singleton) cuando hace falta.
         $this->marketProxy = MarketProxy::getInstance();
 
         // Patron Flyweight: pool compartido de descriptores por tipo de energía.
@@ -82,7 +79,7 @@ class EnergyController extends Controller
         ]);
 
         try {
-            $offer = $this->market->registerOffer($data);
+            $offer = $this->marketProxy->registerOffer($data);
         } catch (\InvalidArgumentException $e) {
             return response()->json(['error' => $e->getMessage()], 422);
         }
@@ -102,7 +99,7 @@ class EnergyController extends Controller
         ]);
 
         try {
-            $offer = $this->market->registerExpressOffer($data);
+            $offer = $this->marketProxy->registerExpressOffer($data);
         } catch (\InvalidArgumentException $e) {
             return response()->json(['error' => $e->getMessage()], 422);
         }
@@ -156,7 +153,7 @@ class EnergyController extends Controller
     public function getMetrics(): JsonResponse
     {
         return response()->json([
-            'market' => $this->market->getMetrics(),
+            'market' => $this->marketProxy->getMetrics(),
             'logger' => $this->logger->getMetrics(),
             'config' => $this->config->getAll(),
         ]);
@@ -177,7 +174,7 @@ class EnergyController extends Controller
         $production = (float) $request->query('production', 0);
         $consumption = (float) $request->query('consumption', 0);
 
-        $marketContext = $this->market->getMarketContext();
+        $marketContext = $this->marketProxy->getMarketContext();
 
         $predictions = array_map(
             fn(AbstractPredictor $predictor) => $predictor->predict(),
@@ -200,7 +197,7 @@ class EnergyController extends Controller
 
         try {
             // Patron Prototype: el backend clona la oferta existente.
-            $offer = $this->market->cloneOffer($id, $adjustments);
+            $offer = $this->marketProxy->cloneOffer($id, $adjustments);
         } catch (\InvalidArgumentException $e) {
             return response()->json(['error' => $e->getMessage()], 422);
         } catch (\RuntimeException $e) {
@@ -229,7 +226,7 @@ class EnergyController extends Controller
 
         try {
             // Patron Prototype: el backend clona la plantilla registrada.
-            $offer = $this->market->createOfferFromTemplate($data['energyType'], $data);
+            $offer = $this->marketProxy->createOfferFromTemplate($data['energyType'], $data);
         } catch (\InvalidArgumentException $e) {
             return response()->json(['error' => $e->getMessage()], 422);
         }

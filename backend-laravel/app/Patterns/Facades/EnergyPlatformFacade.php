@@ -11,7 +11,7 @@ use App\Patterns\ConfigService;
 use App\Patterns\Decorators\OfferPricingService;
 use App\Patterns\Factories\PredictorFactory;
 use App\Patterns\LoggerService;
-use App\Patterns\MarketService;
+use App\Patterns\Proxies\MarketProxy;
 use App\Patterns\Predictors\AbstractPredictor;
 
 /**
@@ -27,7 +27,7 @@ use App\Patterns\Predictors\AbstractPredictor;
  */
 class EnergyPlatformFacade
 {
-    private MarketService $market;
+    private MarketProxy $market;
     private LoggerService $logger;
     private ConfigService $config;
     private PredictorFactory $predictors;
@@ -40,7 +40,9 @@ class EnergyPlatformFacade
     {
         // El Facade es el unico modulo que conoce a todos los
         // subsistemas internos y sus dependencias.
-        $this->market = MarketService::getInstance();
+        // Patron Proxy: el Facade tambien pasa por el Proxy para que la cache
+        // del mercado se invalide en publicaciones y compras.
+        $this->market = MarketProxy::getInstance();
         $this->logger = LoggerService::getInstance();
         $this->config = ConfigService::getInstance();
         $this->predictors = new PredictorFactory();

@@ -36,10 +36,10 @@ El proyecto está planteado como un **prototipo funcional académico**. No tendr
 - [20. `EnergyBundle` / `OfferLeaf` (Composite — Frontend)](#20-energybundle--offerleaf--bundleservice--frontend)
 - [21. `EnergyPlatformFacade` (Facade — Backend)](#21-energyplatformfacade--backend)
 - [22. `PlatformFacade` (Facade — Frontend)](#22-platformfacade--frontend)
-- [23. `EnergySourceFlyweightFactory` (Flyweight — Backend)](#23-energysourceflyweightfactory--flyweight--backend)
-- [24. `EnergyTypeFlyweightFactory` (Flyweight — Frontend)](#24-energytypeflyweightfactory--flyweight--frontend)
-- [25. `MarketProxy` (Proxy — Backend)](#25-marketproxy--proxy--backend)
-- [26. `EnergyApiProxy` (Proxy — Frontend)](#26-energyapiproxy--proxy--frontend)
+- [23. `EnergySourceFlyweightFactory` (Flyweight — Backend)](#23-energysourceflyweightfactory--backend)
+- [24. `EnergyTypeFlyweightFactory` (Flyweight — Frontend)](#24-energytypeflyweightfactory--frontend)
+- [25. `MarketProxy` (Proxy — Backend)](#25-marketproxy--backend)
+- [26. `EnergyApiProxy` (Proxy — Frontend)](#26-energyapiproxy--frontend)
 
 ---
 
@@ -65,7 +65,7 @@ Desarrollar una plataforma web para gestionar el intercambio de excedentes de en
 | Frontend | React + TypeScript + Vite |
 | Backend | Laravel + PHP |
 | Base de datos | Memoria (in-memory) persistida en JSON |
-| Patrones de diseño | Singleton, Factory Method, Abstract Method, Builder, Prototype, Adapter, Bridge, Decorator, Composite, Facade |
+| Patrones de diseño | Singleton, Factory Method, Abstract Method, Builder, Prototype, Adapter, Bridge, Decorator, Composite, Facade, Flyweight, Proxy |
 
 ---
 
@@ -365,6 +365,10 @@ De esta manera, el proyecto permitirá demostrar el funcionamiento de un mercado
 | 20 | [Composite](#20-energybundle--offerleaf--bundleservice--frontend) · `EnergyBundle` + `OfferLeaf` | Frontend | [Ir](#20-energybundle--offerleaf--bundleservice--frontend) |
 | 21 | [Facade](#21-energyplatformfacade--backend) · `EnergyPlatformFacade` | Backend | [Ir](#21-energyplatformfacade--backend) |
 | 22 | [Facade](#22-platformfacade--frontend) · `PlatformFacade` | Frontend | [Ir](#22-platformfacade--frontend) |
+| 23 | [Flyweight](#23-energysourceflyweightfactory--backend) · `EnergySourceFlyweightFactory` | Backend | [Ir](#23-energysourceflyweightfactory--backend) |
+| 24 | [Flyweight](#24-energytypeflyweightfactory--frontend) · `EnergyTypeFlyweightFactory` | Frontend | [Ir](#24-energytypeflyweightfactory--frontend) |
+| 25 | [Proxy](#25-marketproxy--backend) · `MarketProxy` | Backend | [Ir](#25-marketproxy--backend) |
+| 26 | [Proxy](#26-energyapiproxy--frontend) · `EnergyApiProxy` | Frontend | [Ir](#26-energyapiproxy--frontend) |
 
 ---
 
@@ -3668,6 +3672,7 @@ use App\Patterns\Decorators\OfferPricingService;
 use App\Patterns\Factories\PredictorFactory;
 use App\Patterns\LoggerService;
 use App\Patterns\MarketService;
+use App\Patterns\Proxies\MarketProxy;
 use App\Patterns\Predictors\AbstractPredictor;
 
 /**
@@ -3683,7 +3688,7 @@ use App\Patterns\Predictors\AbstractPredictor;
  */
 class EnergyPlatformFacade
 {
-    private MarketService $market;
+    private MarketProxy $market;   // Proxy que envuelve al MarketService
     private LoggerService $logger;
     private ConfigService $config;
     private PredictorFactory $predictors;
@@ -3696,7 +3701,9 @@ class EnergyPlatformFacade
     {
         // El Facade es el unico modulo que conoce a todos los
         // subsistemas internos y sus dependencias.
-        $this->market = MarketService::getInstance();
+        // Patron Proxy: el Facade tambien pasa por MarketProxy para que la
+        // cache del mercado se invalide en publicaciones y compras.
+        $this->market = MarketProxy::getInstance();
         $this->logger = LoggerService::getInstance();
         $this->config = ConfigService::getInstance();
         $this->predictors = new PredictorFactory();
@@ -4115,6 +4122,1253 @@ const handleAdvice = async () => {
 
 ---
 
+<a id="patron-flyweight"></a>
+
+# Patrón Flyweight
+
+## ¿Qué es dentro del proyecto?
+
+El **Flyweight** se usa en el proyecto para **compartir la información que se repite** entre las ofertas de energía. Todas las ofertas de un mismo tipo (solar, eólica o hidráulica) comparten el mismo nombre, descripción, eficiencia, color e imagen; si esa información se almacenara dentro de cada `EnergyOffer`, se duplicaría cientos de veces.
+
+El patrón separa dos tipos de estado:
+
+| Tipo de estado | Qué contiene | Dónde vive |
+|----------------|--------------|------------|
+| **Intrínseco** (compartido) | `type`, `name`, `description`, `efficiency`, `color` y, en el frontend, `emoji`, `image`, `accentBg`, `accentBorder`, `accentText` | Pool del Flyweight: **una sola instancia por tipo** |
+| **Extrínseco** (único) | `id`, `producerName`, `totalKwh`, `availableKwh`, `pricePerKwh`, `createdAt` | Cada `EnergyOffer` / cada oferta del frontend |
+
+De esta forma, **N ofertas reutilizan 3 descriptores** (uno por tipo) en lugar de crear N descriptores. El pool se implementa en dos capas:
+
+- **Backend (PHP):** `EnergySourceFlyweightFactory` comparte instancias de `EnergySource` y las usa para **enriquecer** las ofertas con `energySource`.
+- **Frontend (TypeScript):** `EnergyTypeFlyweightFactory` comparte los descriptores visuales que usan `EnergyDashboard` y `PatternsPanel` para mostrar nombre, imagen, colores y emoji.
+
+Ambos pools son **Singleton** (una única instancia por proceso). El pool del backend se apoya en el **Factory Method** (`EnergySourceFactory`) para crear los descriptores canónicos una sola vez; el pool del frontend siembra directamente sus descriptores visuales. Esto demuestra cómo los patrones se combinan: el Flyweight **comparte**, el Factory Method **crea** y el Singleton **garantiza el pool único**.
+
+**Implementaciones actuales (2):**
+
+- `EnergySourceFlyweightFactory` — Backend (PHP)
+- `EnergyTypeFlyweightFactory` — Frontend (TypeScript)
+
+**¿Por qué Flyweight y no guardar el descriptor en cada oferta?**
+
+- Porque el descriptor es **idéntico** para todas las ofertas del mismo tipo: repetirlo no aporta información nueva.
+- Porque el estado que cambia (productor, kWh, precio, fecha) es **extrínseco** y se mantiene separado.
+- Porque añadir un tipo nuevo solo crea **un descriptor más** en el pool; las ofertas existentes no cambian.
+
+---
+
+## 23. `EnergySourceFlyweightFactory` — Backend
+
+**Archivo:** `backend-laravel/app/Patterns/Flyweights/EnergySourceFlyweightFactory.php`
+
+**En qué consiste dentro del proyecto:** es el **pool de flyweights** del backend. Mantiene un arreglo `pool[tipo] → EnergySource` con los tres descriptores canónicos (`solar`, `wind`, `hydro`). Cuando una oferta necesita su descriptor, `describe($type)` devuelve el **mismo objeto** del pool; no se crea uno nuevo por oferta. El estado extrínseco permanece en `EnergyOffer`.
+
+**Cómo funciona:**
+
+1. `getInstance()` crea el pool una sola vez (Singleton).
+2. En el constructor, `load()` recupera las métricas acumuladas de `storage/app/flyweight_data.json`.
+3. `seedPool()` crea los tres descriptores canónicos usando `(new EnergySourceFactory())->create($type)` (Factory Method). Solo ocurre una vez por instancia.
+4. `get($type)` devuelve la instancia compartida del pool. Si el tipo no estuviera en el pool, intenta crearlo con la fábrica; cualquier tipo distinto de `solar`, `wind` o `hydro` provoca una excepción de la fábrica.
+5. Cada llamada a `get()` incrementa `totalUses` y `usesByType`, y persiste las métricas.
+6. `describe($type)` devuelve `toArray()` del descriptor; `EnergyController` lo usa para enriquecer cada oferta.
+7. `getStats()` expone las métricas: instancias compartidas, usos totales, instancias ahorradas, usos por tipo y descriptores del pool.
+
+**Diagrama UML:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    «FlyweightFactory»                       │
+│              EnergySourceFlyweightFactory                   │
+├─────────────────────────────────────────────────────────────┤
+│ - instance : ?EnergySourceFlyweightFactory  (Singleton)     │
+│ - pool : array<string, EnergySource>                        │
+│ - metrics : { totalUses, usesByType }                       │
+├─────────────────────────────────────────────────────────────┤
+│ + getInstance() : self                                      │
+│ + get(type) : EnergySource        ← MISMA instancia         │
+│ + describe(type) : array                                    │
+│ + getStats() : array                                        │
+└───────────────┬─────────────────────────────────────────────┘
+                │ crea una vez por tipo
+                ▼
+     ┌─────────────────────────┐
+     │ «Factory Method»        │
+     │ EnergySourceFactory     │
+     ├─────────────────────────┤
+     │ solar → SolarEnergy     │
+     │ wind  → WindEnergy      │
+     │ hydro → HydroEnergy     │
+     └─────────────────────────┘
+
+Ofertas (N) ──usan──▶ descriptor compartido (3 instancias)
+```
+
+**Código completo** (`EnergySourceFlyweightFactory.php`):
+
+```php
+<?php
+
+namespace App\Patterns\Flyweights;
+
+use App\Patterns\EnergySources\EnergySource;
+use App\Patterns\Factories\EnergySourceFactory;
+
+/**
+ * Patron Flyweight.
+ *
+ * Comparte UNA SOLA instancia de EnergySource por cada tipo de energia
+ * (solar, wind, hydro). El estado intrinseco (nombre, descripcion,
+ * eficiencia y color del tipo) vive en el flyweight y es el mismo para
+ * todas las ofertas; el estado extrinseco (productor, kWh, precio,
+ * fecha) vive fuera, en cada EnergyOffer.
+ *
+ * De esta forma, cientos de ofertas reutilizan 3 instancias en lugar de
+ * instanciar un descriptor nuevo por cada oferta.
+ */
+class EnergySourceFlyweightFactory
+{
+    private static ?EnergySourceFlyweightFactory $instance = null;
+
+    /** @var array<string, EnergySource> Pool de flyweights canonicos por tipo. */
+    private array $pool = [];
+
+    private string $dataFile;
+
+    /** @var array{totalUses:int,usesByType:array<string,int>} */
+    private array $metrics = [
+        'totalUses' => 0,
+        'usesByType' => [],
+    ];
+
+    private function __construct()
+    {
+        $this->dataFile = storage_path('app/flyweight_data.json');
+        $this->load();
+        $this->seedPool();
+    }
+
+    public static function getInstance(): self
+    {
+        if (self::$instance === null) {
+            self::$instance = new self();
+        }
+        return self::$instance;
+    }
+
+    /**
+     * Crea los flyweights canonicos UNA vez apoyandose en el Factory Method
+     * (EnergySourceFactory). A partir de aqui siempre se comparten.
+     */
+    private function seedPool(): void
+    {
+        foreach (EnergySourceFactory::TYPES as $type) {
+            if (!isset($this->pool[$type])) {
+                $this->pool[$type] = (new EnergySourceFactory())->create($type);
+            }
+        }
+    }
+
+    private function load(): void
+    {
+        if (file_exists($this->dataFile)) {
+            $data = json_decode(file_get_contents($this->dataFile), true) ?? [];
+            $this->metrics = array_merge($this->metrics, $data['metrics'] ?? []);
+        }
+    }
+
+    private function save(): void
+    {
+        file_put_contents($this->dataFile, json_encode(
+            ['metrics' => $this->metrics],
+            JSON_PRETTY_PRINT
+        ));
+    }
+
+    /**
+     * Devuelve el flyweight COMPARTIDO del tipo pedido. Si el tipo no
+     * pertenece al catalogo base se delega en el Factory Method.
+     */
+    public function get(string $type): EnergySource
+    {
+        $key = strtolower(trim($type));
+
+        if (!isset($this->pool[$key])) {
+            // Tipo fuera del catalogo base: se crea y se comparte tambien.
+            $this->pool[$key] = (new EnergySourceFactory())->create($key);
+        }
+
+        // Cada uso reutiliza la MISMA instancia (cache hit del pool).
+        $this->metrics['totalUses']++;
+        $this->metrics['usesByType'][$key] = ($this->metrics['usesByType'][$key] ?? 0) + 1;
+        $this->save();
+
+        return $this->pool[$key];
+    }
+
+    /** Estado compartido del tipo, listo para enriquecer una oferta. */
+    public function describe(string $type): array
+    {
+        return $this->get($type)->toArray();
+    }
+
+    /** Metricas del pool: instancias compartidas vs. usos acumulados. */
+    public function getStats(): array
+    {
+        $shared = count($this->pool);
+
+        return [
+            'createdInstances' => $shared,
+            'totalUses' => $this->metrics['totalUses'],
+            'savedInstances' => max(0, $this->metrics['totalUses'] - $shared),
+            'usesByType' => $this->metrics['usesByType'],
+            'sharedTypes' => array_values(array_map(
+                fn (EnergySource $source) => [
+                    'type' => $source->getType(),
+                    'name' => $source->getName(),
+                    'color' => $source->getColor(),
+                ],
+                $this->pool
+            )),
+            'note' => 'Sin Flyweight, cada uso crearia una instancia nueva (1 por oferta/consulta). '
+                . 'Con Flyweight, todos los usos comparten las mismas instancias del pool (una por tipo).',
+        ];
+    }
+}
+```
+
+**Integración con el sistema:**
+
+| Punto de integración | Qué hace |
+|----------------------|----------|
+| `EnergyController::getAvailableOffers()` | Pide las ofertas al `MarketProxy` y añade `energySource` con `describe($offer['energyType'])` |
+| `EnergyController::getFlyweightStats()` | Devuelve `getStats()` para el panel de patrones |
+| `GET /api/energy/offers` | Cada oferta incluye su descriptor compartido |
+| `GET /api/energy/flyweight-stats` | Métricas del pool (instancias compartidas vs. usos) |
+| `PatternsPanel` (React) | Muestra los descriptores y las métricas del backend |
+
+```php
+// EnergyController::getAvailableOffers()
+$offers = array_map(
+    fn ($o) => $o->toArray(),
+    $this->marketProxy->getAvailableOffers()
+);
+
+// Patron Flyweight: enriquece cada oferta con su descriptor compartido.
+$offers = array_map(function (array $offer) {
+    $type = $offer['energyType'] ?? '';
+    if ($type === '') {
+        return $offer;
+    }
+
+    return array_merge(
+        $offer,
+        ['energySource' => $this->sourceFlyweights->describe($type)]
+    );
+}, $offers);
+```
+
+**Ejemplo de respuesta** (`GET /api/energy/offers`, oferta enriquecida):
+
+```json
+[
+  {
+    "id": 1,
+    "producerName": "Oscar",
+    "energyType": "wind",
+    "totalKwh": 50,
+    "availableKwh": 43,
+    "pricePerKwh": 450,
+    "description": "Excedente del aerogenerador",
+    "createdAt": "2026-10-19 10:00:00",
+    "energySource": {
+      "type": "wind",
+      "name": "Energia Eolica",
+      "description": "Aprovecha el viento mediante aerogeneradores para producir electricidad renovable.",
+      "efficiency": 70,
+      "color": "#3498db"
+    }
+  }
+]
+```
+
+**Métricas** (`GET /api/energy/flyweight-stats`):
+
+```json
+{
+  "createdInstances": 3,
+  "totalUses": 12,
+  "savedInstances": 9,
+  "usesByType": {
+    "wind": 7,
+    "solar": 3,
+    "hydro": 2
+  },
+  "sharedTypes": [
+    { "type": "solar", "name": "Energia Solar", "color": "#f39c12" },
+    { "type": "wind", "name": "Energia Eolica", "color": "#3498db" },
+    { "type": "hydro", "name": "Energia Hidraulica", "color": "#2ecc71" }
+  ],
+  "note": "Sin Flyweight, cada uso crearia una instancia nueva..."
+}
+```
+
+> **Lectura de las métricas:** `createdInstances` son los descriptores del pool (3, uno por tipo); `totalUses` son las veces que las ofertas/consultas pidieron un descriptor; `savedInstances` es la diferencia, es decir, las instancias que **no** hubo que crear gracias al Flyweight. `usesByType` muestra qué tipos se están reutilizando más.
+
+---
+
+## 24. `EnergyTypeFlyweightFactory` — Frontend
+
+**Archivo:** `frontend/src/patterns/flyweight/EnergyTypeFlyweightFactory.ts`
+
+**En qué consiste dentro del proyecto:** es el **pool de descriptores visuales** del frontend. Mantiene un `Map<string, EnergyTypeDescriptor>` con una instancia por tipo de energía. Todos los componentes que muestran una oferta acceden al **mismo descriptor** para obtener nombre, imagen, color, emoji y estilos de acento. El estado extrínseco (productor, kWh, precio, fecha) sigue viviendo en cada oferta que llega del backend.
+
+**Campos del descriptor compartido:**
+
+| Campo | Ejemplo (`solar`) | Uso en la interfaz |
+|-------|-------------------|--------------------|
+| `type` | `solar` | Clave del pool |
+| `name` | `Energia Solar` | Etiqueta visible |
+| `description` | `Captura la luz del sol...` | Texto descriptivo |
+| `efficiency` | `85` | Indicador de eficiencia |
+| `color` | `#f39c12` | Color principal del tipo |
+| `emoji` | `☀️` | Icono en tarjetas y badges |
+| `image` | `/images/solar-energy.svg` | Imagen de la oferta |
+| `accentBg` | `#fdf3e3` | Fondo de badges |
+| `accentBorder` | `#f39c12` | Borde de badges |
+| `accentText` | `#7a5200` | Texto de badges |
+
+**Cómo funciona:**
+
+1. `getInstance()` devuelve la única instancia del pool (Singleton).
+2. `seed()` carga los tres descriptores canónicos (`solar`, `wind`, `hydro`) con todos sus campos visuales.
+3. `get($type)` devuelve el descriptor compartido o `null` si el tipo no existe.
+4. `ensure($type)` devuelve el descriptor y, si el tipo es desconocido, cae en `solar` para no romper la interfaz.
+5. `getName()`, `getImage()` y `getColor()` son atajos que usan los componentes.
+6. `list()` devuelve los tres descriptores para el panel de patrones.
+7. `describe($type)` devuelve el descriptor completo cuando se necesita.
+
+**Diagrama UML:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    «FlyweightFactory»                       │
+│              EnergyTypeFlyweightFactory                     │
+├─────────────────────────────────────────────────────────────┤
+│ - instance : EnergyTypeFlyweightFactory  (Singleton)        │
+│ - pool : Map<string, EnergyTypeDescriptor>                  │
+├─────────────────────────────────────────────────────────────┤
+│ + getInstance() : EnergyTypeFlyweightFactory                │
+│ + get(type) : EnergyTypeDescriptor | null                   │
+│ + ensure(type) : EnergyTypeDescriptor                       │
+│ + getName(type) / getImage(type) / getColor(type)           │
+│ + list() : EnergyTypeDescriptor[]                           │
+└─────────────────────────────────────────────────────────────┘
+          ▲                         ▲
+          │                         │
+   EnergyDashboard            PatternsPanel
+   (imagen, nombre)           (badges y lista)
+```
+
+**Código completo** (`EnergyTypeFlyweightFactory.ts`):
+
+```typescript
+import type { EnergySource as _EnergySource } from '../factory/types';
+
+export interface EnergyTypeDescriptor {
+  type: string;
+  name: string;
+  description: string;
+  efficiency: number;
+  color: string;
+  emoji: string;
+  image: string;
+  accentBg: string;
+  accentBorder: string;
+  accentText: string;
+}
+
+/**
+ * Patron Flyweight (frontend).
+ *
+ * Reutiliza descriptores compartidos por tipo de energia (solar, wind, hydro).
+ * Cada componente que muestre el mismo tipo accede a la MISMA instancia.
+ */
+class EnergyTypeFlyweightFactory {
+  private static instance: EnergyTypeFlyweightFactory;
+  private readonly pool = new Map<string, EnergyTypeDescriptor>();
+
+  private constructor() {
+    this.seed();
+  }
+
+  static getInstance(): EnergyTypeFlyweightFactory {
+    if (!EnergyTypeFlyweightFactory.instance) {
+      EnergyTypeFlyweightFactory.instance = new EnergyTypeFlyweightFactory();
+    }
+    return EnergyTypeFlyweightFactory.instance;
+  }
+
+  private seed() {
+    this.pool.set('solar', {
+      type: 'solar',
+      name: 'Energia Solar',
+      description: 'Captura la luz del sol mediante paneles fotovoltaicos para generar electricidad de forma limpia.',
+      efficiency: 85,
+      color: '#f39c12',
+      emoji: '☀️',
+      image: '/images/solar-energy.svg',
+      accentBg: '#fdf3e3',
+      accentBorder: '#f39c12',
+      accentText: '#7a5200',
+    });
+    this.pool.set('wind', {
+      type: 'wind',
+      name: 'Energia Eolica',
+      description: 'Aprovecha el viento mediante aerogeneradores para producir electricidad renovable.',
+      efficiency: 70,
+      color: '#3498db',
+      emoji: '🌬️',
+      image: '/images/wind-energy.svg',
+      accentBg: '#eaf4fb',
+      accentBorder: '#3498db',
+      accentText: '#1f5a85',
+    });
+    this.pool.set('hydro', {
+      type: 'hydro',
+      name: 'Energia Hidraulica',
+      description: 'Convierte la energia del agua en movimiento en electricidad aprovechando embalses y corrientes.',
+      efficiency: 92,
+      color: '#2ecc71',
+      emoji: '💧',
+      image: '/images/hydro-energy.svg',
+      accentBg: '#e9f9f0',
+      accentBorder: '#2ecc71',
+      accentText: '#1c6b3f',
+    });
+  }
+
+  get(type?: string | null): EnergyTypeDescriptor | null {
+    if (!type) return null;
+    const key = type.toLowerCase();
+    return this.pool.get(key) ?? null;
+  }
+
+  ensure(type?: string | null): EnergyTypeDescriptor {
+    const found = this.get(type);
+    if (found) return found;
+    return this.get('solar')!;
+  }
+
+  getName(type?: string | null): string {
+    return this.get(type)?.name ?? (type ?? '').toString();
+  }
+
+  getImage(type?: string | null): string {
+    return this.get(type)?.image ?? '/images/renewable-landscape.svg';
+  }
+
+  getColor(type?: string | null): string {
+    return this.get(type)?.color ?? '#888';
+  }
+
+  describe(type?: string | null): EnergyTypeDescriptor | null {
+    return this.get(type);
+  }
+
+  list(): EnergyTypeDescriptor[] {
+    return Array.from(this.pool.values());
+  }
+}
+
+const energyTypeFlyweightFactory = EnergyTypeFlyweightFactory.getInstance();
+export default energyTypeFlyweightFactory;
+export { EnergyTypeFlyweightFactory };
+```
+
+**Integración con el sistema:**
+
+| Punto de integración | Qué hace |
+|----------------------|----------|
+| `EnergyDashboard.tsx` | Usa `getImage()` y `getName()` para mostrar la imagen y la etiqueta de cada oferta |
+| `PatternsPanel.tsx` | Usa `list()` para pintar los tres badges y mostrar los descriptores compartidos |
+| `EnergyApiProxy` / `EnergyApiService` | Traen las ofertas del backend; el descriptor visual se resuelve localmente con el pool |
+
+```tsx
+// EnergyDashboard.tsx — la misma instancia para todas las tarjetas
+import energyTypeFlyweightFactory from '../patterns/flyweight/EnergyTypeFlyweightFactory';
+
+<img
+  src={energyTypeFlyweightFactory.getImage(offer.energyType)}
+  alt={energyTypeFlyweightFactory.getName(offer.energyType)}
+/>
+
+{offer.energyType && (
+  <span className="offer-type">
+    {energyTypeFlyweightFactory.getName(offer.energyType)}
+  </span>
+)}
+```
+
+```tsx
+// PatternsPanel.tsx — lista los descriptores compartidos del pool
+const fly = energyTypeFlyweightFactory;
+
+{fly.list().map((d) => (
+  <span
+    key={d.type}
+    style={{
+      backgroundColor: d.accentBg,
+      color: d.accentText,
+      borderColor: d.accentBorder,
+    }}
+  >
+    {d.emoji} {d.name}
+  </span>
+))}
+```
+
+**Comparativa backend vs. frontend:**
+
+| Aspecto | Backend (PHP) | Frontend (TS) |
+|---------|---------------|----------------|
+| Pool | `array<string, EnergySource>` | `Map<string, EnergyTypeDescriptor>` |
+| Estado intrínseco | Tipo, nombre, descripción, eficiencia, color | Los anteriores + emoji, imagen y estilos |
+| Estado extrínseco | `EnergyOffer` | Objeto `EnergyOffer` que llega de la API |
+| Métricas | `getStats()` con usos y ahorro | `list()` para mostrar los descriptores |
+| Uso principal | Enriquecer la respuesta de `/offers` | Pintar tarjetas, badges e imágenes |
+
+---
+
+<a id="patron-proxy"></a>
+
+# Patrón Proxy
+
+## ¿Qué es dentro del proyecto?
+
+El **Proxy** se usa para **controlar el acceso al mercado de energía** sin cambiar el contrato de `MarketService`. El cliente sigue llamando a los mismos métodos (`getAvailableOffers()`, `purchaseOffer()`, etc.), pero el Proxy intercepta la llamada para añadir tres responsabilidades:
+
+1. **Proxy virtual:** crear el objeto real (`MarketService`) **solo cuando se necesita**, no en el constructor.
+2. **Proxy de caché:** servir la lista de ofertas desde una caché con **TTL** (`offersCacheTtl`, 10 segundos por defecto) y **invalidarla** cuando el mercado cambia (publicar, clonar, comprar).
+3. **Proxy de protección:** validar cada compra contra la política de `ConfigService` (**mínimo 1 kWh, máximo 100 kWh**) y **bloquear** las operaciones fuera de rango antes de llegar al sujeto real.
+
+El patrón se implementa en las dos capas:
+
+- **Backend (PHP):** `MarketProxy` envuelve al `MarketService` (Singleton) y es el punto de acceso que usa `EnergyController` y `EnergyPlatformFacade`.
+- **Frontend (TypeScript):** `EnergyApiProxy` envuelve al `EnergyApiService` (Singleton), cachea las ofertas 10 segundos y valida las compras antes de enviarlas al backend.
+
+**Implementaciones actuales (2):**
+
+- `MarketProxy` — Backend (PHP)
+- `EnergyApiProxy` — Frontend (TypeScript)
+
+**Las tres facetas del Proxy en el proyecto:**
+
+| Faceta | Backend (`MarketProxy`) | Frontend (`EnergyApiProxy`) |
+|--------|-------------------------|-----------------------------|
+| **Virtual** | `real()` crea `MarketService` al primer acceso | El cliente HTTP se obtiene del Singleton al construir el Proxy |
+| **Caché** | `getAvailableOffers()` + `market_proxy_cache.json` + TTL configurable | `offersCache` en memoria + TTL de 10 000 ms |
+| **Protección** | `purchaseOffer()` valida mínimo/máximo desde `ConfigService` | `purchaseOffer()` valida 1–100 kWh antes de llamar a la API |
+
+**¿Por qué Proxy y no llamar directamente al servicio real?**
+
+- Porque consultar el mercado en cada petición es costoso y repetitivo; la caché evita recorrer las ofertas cuando no han cambiado.
+- Porque las compras necesitan una **política de seguridad** centralizada; el Proxy la aplica antes del sujeto real.
+- Porque el cliente no debe cambiar: el Proxy expone **el mismo contrato** y puede sustituir al servicio real de forma transparente.
+- Porque la inicialización diferida evita crear el mercado si la petición no lo necesita.
+
+**Diferencia con otros patrones del proyecto:**
+
+| Patrón | Diferencia clave |
+|--------|------------------|
+| **Proxy vs. Decorator** | El Decorator **añade** comportamiento al resultado; el Proxy **controla el acceso** sin cambiar el resultado de negocio. |
+| **Proxy vs. Facade** | El Facade **simplifica** muchos subsistemas con una interfaz nueva; el Proxy sustituye **un** objeto con el mismo contrato. |
+| **Proxy vs. Adapter** | El Adapter **traduce** interfaces incompatibles; el Proxy mantiene la interfaz del sujeto real. |
+
+---
+
+## 25. `MarketProxy` — Backend
+
+**Archivo:** `backend-laravel/app/Patterns/Proxies/MarketProxy.php`
+
+**En qué consiste dentro del proyecto:** es el **sustituto transparente** de `MarketService`. `EnergyController` y `EnergyPlatformFacade` lo usan como si fuera el mercado real, pero el Proxy decide si responde desde la caché, si crea el sujeto real o si bloquea una compra. También es un **Singleton**, para que la caché y las políticas sean únicas en todo el proceso.
+
+**Métodos principales:**
+
+| Método | Responsabilidad |
+|--------|-----------------|
+| `getInstance()` | Devuelve la única instancia del Proxy |
+| `real()` | Proxy virtual: crea `MarketService` solo al primer acceso |
+| `getAvailableOffers()` | Cache hit → devuelve ofertas cacheadas; cache miss → consulta el mercado y cachea |
+| `purchaseOffer($id, $kwh)` | Valida mínimo/máximo, delega en el mercado e invalida la caché si la compra fue exitosa |
+| `registerOffer()` / `registerExpressOffer()` | Delegan en el mercado e invalidan la caché |
+| `cloneOffer()` / `createOfferFromTemplate()` | Delegan en el mercado e invalidan la caché |
+| `getOfferById()` / `getMetrics()` / `getMarketContext()` | Delegación transparente |
+| `invalidateCache()` | Borra la caché en memoria y el archivo `market_proxy_cache.json` |
+| `getCacheStatus()` | Estado de la caché para `GET /api/energy/proxy-stats` |
+
+**Cómo funciona la caché:**
+
+1. En el primer `getAvailableOffers()`, el Proxy consulta `MarketService`, convierte las ofertas a arreglos y escribe `market_proxy_cache.json` con `offers` y `expiresAt = time() + offersCacheTtl`.
+2. En las siguientes peticiones, si `time() < expiresAt`, devuelve las ofertas del archivo **sin tocar** `MarketService` (cache hit) y lo registra en el log.
+3. Cuando el TTL expira, vuelve a consultar el mercado (cache miss) y reescribe la caché.
+4. Cualquier mutación (`registerOffer`, `registerExpressOffer`, `cloneOffer`, `createOfferFromTemplate`, `purchaseOffer` exitosa) llama a `invalidateCache()`, de modo que la siguiente lectura vea el estado actualizado.
+
+**Diagrama UML:**
+
+```
+                    ┌──────────────────────────────────┐
+                    │            «Client»              │
+                    │  EnergyController                │
+                    │  EnergyPlatformFacade            │
+                    └───────────────┬──────────────────┘
+                                    │ getAvailableOffers()
+                                    │ purchaseOffer(id, kwh)
+                                    ▼
+                    ┌──────────────────────────────────┐
+                    │            «Proxy»               │
+                    │           MarketProxy            │
+                    ├──────────────────────────────────┤
+                    │ - real : ?MarketService          │
+                    │ - cache : ?array                 │
+                    │ - cacheFile : string             │
+                    ├──────────────────────────────────┤
+                    │ + getAvailableOffers() : array   │
+                    │ + purchaseOffer(id, kwh) : array │
+                    │ + registerOffer(data)            │
+                    │ + cloneOffer(id, adj)            │
+                    │ + invalidateCache()              │
+                    │ + getCacheStatus() : array       │
+                    └───────┬──────────────────┬───────┘
+                            │                  │
+             cache hit      │                  │ cache miss / mutación
+                            ▼                  ▼
+              ┌──────────────────────┐   ┌──────────────────────────┐
+              │ market_proxy_cache   │   │      «RealSubject»       │
+              │      .json           │   │      MarketService       │
+              │ offers + expiresAt   │   │      (Singleton)         │
+              └──────────────────────┘   └──────────────────────────┘
+                            ▲
+                            │ política
+              ┌─────────────┴─────────────┐
+              │      ConfigService        │
+              │ offersCacheTtl = 10       │
+              │ minPurchaseKwh = 1        │
+              │ maxPurchaseKwh = 100      │
+              └───────────────────────────┘
+```
+
+**Código completo** (`MarketProxy.php`):
+
+```php
+<?php
+
+namespace App\Patterns\Proxies;
+
+use App\Models\EnergyOffer;
+use App\Patterns\ConfigService;
+use App\Patterns\LoggerService;
+use App\Patterns\MarketService;
+
+/**
+ * Patron Proxy.
+ *
+ * Sustituto transparente de MarketService que controla el acceso al
+ * mercado. Combina tres facetas del Proxy sobre la MISMA interfaz:
+ *
+ *  - Proxy virtual: solo instancia MarketService cuando hace falta.
+ *  - Proxy de caché: cachea las ofertas disponibles durante unos
+ *    segundos (TTL) para no recorrer el mercado en cada petición y
+ *    invalida la caché cuando el mercado cambia.
+ *  - Proxy de protección: valida cada compra contra ConfigService
+ *    (cantidad mínima y máximo por operación) y bloquea las compras
+ *    fuera de política antes de llegar al sujeto real.
+ *
+ * El cliente (EnergyController) sigue llamando a los mismos métodos que
+ * expondría MarketService: el Proxy no cambia el contrato.
+ */
+class MarketProxy
+{
+    private static ?MarketProxy $instance = null;
+
+    private ?MarketService $real = null;
+
+    /** @var array{offers:array,expiresAt:int}|null Caché de ofertas en disco. */
+    private ?array $cache = null;
+
+    private string $cacheFile;
+
+    private function __construct()
+    {
+        $this->cacheFile = storage_path('app/market_proxy_cache.json');
+        $this->loadCache();
+    }
+
+    public static function getInstance(): self
+    {
+        if (self::$instance === null) {
+            self::$instance = new self();
+        }
+        return self::$instance;
+    }
+
+    // ------------------------------------------------------------------
+    // Proxy virtual: el sujeto real se crea solo al primer acceso.
+    // ------------------------------------------------------------------
+
+    private function real(): MarketService
+    {
+        if ($this->real === null) {
+            $this->real = MarketService::getInstance();
+        }
+        return $this->real;
+    }
+
+    // ------------------------------------------------------------------
+    // Proxy de caché: ofertas disponibles con TTL.
+    // ------------------------------------------------------------------
+
+    private function loadCache(): void
+    {
+        if (file_exists($this->cacheFile)) {
+            $this->cache = json_decode(file_get_contents($this->cacheFile), true);
+        }
+    }
+
+    private function ttl(): int
+    {
+        return (int) ConfigService::getInstance()->get('offersCacheTtl');
+    }
+
+    private function isCacheValid(): bool
+    {
+        return $this->cache !== null
+            && isset($this->cache['expiresAt'])
+            && time() < (int) $this->cache['expiresAt'];
+    }
+
+    private function writeCache(array $offers): void
+    {
+        $this->cache = [
+            'offers' => $offers,
+            'expiresAt' => time() + $this->ttl(),
+        ];
+        file_put_contents($this->cacheFile, json_encode($this->cache, JSON_PRETTY_PRINT));
+    }
+
+    /** Invalida la caché (llamado tras cualquier mutación del mercado). */
+    public function invalidateCache(): void
+    {
+        $this->cache = null;
+        if (file_exists($this->cacheFile)) {
+            unlink($this->cacheFile);
+        }
+    }
+
+    public function getAvailableOffers(): array
+    {
+        if ($this->isCacheValid()) {
+            // Cache hit: no se toca el mercado real.
+            LoggerService::getInstance()->log('Proxy: ofertas servidas desde la caché (cache hit)');
+            return array_map(function (array $offer) {
+                $e = new EnergyOffer();
+                $e->id = $offer['id'];
+                $e->producerName = $offer['producerName'];
+                $e->totalKwh = $offer['totalKwh'];
+                $e->availableKwh = $offer['availableKwh'];
+                $e->pricePerKwh = $offer['pricePerKwh'];
+                $e->description = $offer['description'];
+                $e->energyType = $offer['energyType'];
+                $e->createdAt = $offer['createdAt'];
+                return $e;
+            }, $this->cache['offers']);
+        }
+
+        // Cache miss: se consulta el sujeto real y se cachea el resultado.
+        $offers = array_values($this->real()->getAvailableOffers());
+        $this->writeCache(array_map(fn (EnergyOffer $o) => $o->toArray(), $offers));
+
+        return $offers;
+    }
+
+    // ------------------------------------------------------------------
+    // Proxy de protección: toda compra pasa primero por la política.
+    // ------------------------------------------------------------------
+
+    public function purchaseOffer(int $id, int $kwh): array
+    {
+        $config = ConfigService::getInstance();
+        $minKwh = (float) $config->get('minPurchaseKwh');
+        $maxKwh = (float) $config->get('maxPurchaseKwh');
+
+        if ($kwh < $minKwh) {
+            LoggerService::getInstance()->log("Proxy: compra bloqueada ({$kwh} kWh < mínimo {$minKwh})");
+            return [
+                'success' => false,
+                'message' => "Proxy de seguridad: la compra mínima es {$minKwh} kWh",
+            ];
+        }
+
+        if ($kwh > $maxKwh) {
+            LoggerService::getInstance()->log("Proxy: compra bloqueada ({$kwh} kWh > máximo {$maxKwh})");
+            return [
+                'success' => false,
+                'message' => "Proxy de seguridad: no se pueden comprar más de {$maxKwh} kWh por operación",
+            ];
+        }
+
+        // Política cumplida: se delega en el sujeto real y se invalida la caché.
+        $result = $this->real()->purchaseOffer($id, $kwh);
+
+        if ($result['success']) {
+            $this->invalidateCache();
+        }
+
+        return $result;
+    }
+
+    // ------------------------------------------------------------------
+    // Resto de la interfaz: delegación transparente en el sujeto real.
+    // ------------------------------------------------------------------
+
+    public function registerOffer(array $data): EnergyOffer
+    {
+        $offer = $this->real()->registerOffer($data);
+        $this->invalidateCache();
+        return $offer;
+    }
+
+    public function registerExpressOffer(array $data): EnergyOffer
+    {
+        $offer = $this->real()->registerExpressOffer($data);
+        $this->invalidateCache();
+        return $offer;
+    }
+
+    public function cloneOffer(int $sourceId, array $adjustments = []): EnergyOffer
+    {
+        $offer = $this->real()->cloneOffer($sourceId, $adjustments);
+        $this->invalidateCache();
+        return $offer;
+    }
+
+    public function createOfferFromTemplate(string $type, array $data): EnergyOffer
+    {
+        $offer = $this->real()->createOfferFromTemplate($type, $data);
+        $this->invalidateCache();
+        return $offer;
+    }
+
+    public function getOfferById(int $id): ?EnergyOffer
+    {
+        return $this->real()->getOfferById($id);
+    }
+
+    public function getMetrics(): array
+    {
+        return $this->real()->getMetrics();
+    }
+
+    public function getMarketContext(): array
+    {
+        return $this->real()->getMarketContext();
+    }
+
+    /** Estado de la caché del Proxy, para el panel de patrones. */
+    public function getCacheStatus(): array
+    {
+        return [
+            'ttlSeconds' => $this->ttl(),
+            'valid' => $this->isCacheValid(),
+            'entries' => $this->isCacheValid() ? count($this->cache['offers']) : 0,
+            'expiresIn' => $this->isCacheValid() ? max(0, (int) $this->cache['expiresAt'] - time()) : 0,
+        ];
+    }
+}
+```
+
+**Política de protección y caché** (valores actuales de `ConfigService`):
+
+| Clave | Valor por defecto | Uso en el Proxy |
+|-------|-------------------|-----------------|
+| `offersCacheTtl` | `10` segundos | TTL de la caché de ofertas |
+| `minPurchaseKwh` | `1` kWh | Mínimo por operación de compra |
+| `maxPurchaseKwh` | `100` kWh | Máximo por operación de compra |
+| `defaultPricePerKwh` | `500` COP | Precio por defecto del mercado (no lo usa el Proxy, pero contextualiza) |
+| `maxOfferKwh` | `1000` kWh | Tope de una oferta (validado en el mercado) |
+
+**Integración con el sistema:**
+
+| Punto de integración | Qué hace |
+|----------------------|----------|
+| `EnergyController::getAvailableOffers()` | Llama a `$this->marketProxy->getAvailableOffers()` (caché + virtual) |
+| `EnergyController::purchaseOffer()` | Llama a `$this->marketProxy->purchaseOffer()` (protección + invalidación) |
+| `EnergyController::store()` / `storeExpress()` / `clone()` / `cloneTemplate()` | Pasan por el Proxy para invalidar la caché al mutar |
+| `EnergyPlatformFacade` | Usa `MarketProxy` para que las operaciones del panel también mantengan la caché coherente |
+| `GET /api/energy/proxy-stats` | Devuelve `getCacheStatus()` + configuración |
+
+**Endpoints del patrón Proxy:**
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| GET | `/api/energy/offers` | Ofertas disponibles; puede servirse desde la caché del Proxy |
+| POST | `/api/energy/offers/{id}/purchase` | Compra protegida (1–100 kWh); invalida la caché si es exitosa |
+| POST | `/api/energy/offers` | Publica una oferta; invalida la caché |
+| POST | `/api/energy/offers/express` | Publica una oferta exprés; invalida la caché |
+| POST | `/api/energy/offers/{id}/clone` | Clona una oferta; invalida la caché |
+| POST | `/api/energy/offers/clone-template` | Crea desde plantilla; invalida la caché |
+| GET | `/api/energy/proxy-stats` | Estado de la caché (`valid`, `entries`, `expiresIn`, `ttlSeconds`) y política |
+
+**Ejemplo de respuesta** (`GET /api/energy/proxy-stats`):
+
+```json
+{
+  "cache": {
+    "ttlSeconds": 10,
+    "valid": true,
+    "entries": 4,
+    "expiresIn": 7
+  },
+  "config": {
+    "marketName": "Plataforma de Comercio de Energia",
+    "defaultPricePerKwh": 500,
+    "currency": "COP",
+    "maxOfferKwh": 1000,
+    "minPurchaseKwh": 1,
+    "maxPurchaseKwh": 100,
+    "offersCacheTtl": 10
+  }
+}
+```
+
+**Prueba funcional (cache hit y bloqueo):**
+
+```bash
+B=http://localhost:8000/api/energy
+
+# 1) Primera lectura: cache miss (consulta el mercado y cachea)
+curl $B/offers > /dev/null
+
+# 2) Segunda lectura: cache hit (el Proxy no toca MarketService)
+curl $B/offers > /dev/null
+
+# 3) Estado: la cache debe estar válida y con entradas
+curl $B/proxy-stats
+
+# 4) Compra fuera de política: el Proxy la bloquea antes del sujeto real
+curl -X POST $B/offers/1/purchase \
+  -H "Content-Type: application/json" \
+  -d '{"kwh": 999}'
+# → {"success":false,"message":"Proxy de seguridad: no se pueden comprar más de 100 kWh por operación"}
+
+# 5) Compra válida: delega y invalida la cache
+curl -X POST $B/offers/1/purchase \
+  -H "Content-Type: application/json" \
+  -d '{"kwh": 2}'
+```
+
+> **Importante:** todas las rutas que modifican el mercado pasan por el Proxy (`EnergyController` y `EnergyPlatformFacade`), de modo que la caché se invalida también al publicar, clonar o comprar desde el panel unificado. Así se evita servir ofertas desactualizadas.
+
+---
+
+## 26. `EnergyApiProxy` — Frontend
+
+**Archivo:** `frontend/src/patterns/proxy/EnergyApiProxy.ts`
+
+**En qué consiste dentro del proyecto:** es el **Proxy del cliente HTTP**. Envuelve a `EnergyApiService` (Singleton) y añade una caché de ofertas con TTL de **10 segundos** y la validación de compras (**1–100 kWh**). Los componentes no llaman directamente al servicio: usan el Proxy, que decide si responde desde su caché o si hace la petición real.
+
+**Cómo funciona:**
+
+1. `getInstance()` devuelve la única instancia del Proxy (Singleton).
+2. `getAvailableOffers()` comprueba `offersCache`; si no ha expirado, devuelve los datos cacheados.
+3. Si expiró o no existe, llama a `EnergyApiService.getAvailableOffers()` y guarda `{ data, expiresAt }`.
+4. `purchaseOffer(id, kwh)` valida el rango 1–100 kWh **antes** de llamar a la API; si la compra es exitosa, invalida la caché de ofertas.
+5. `invalidateOffers()` permite forzar la invalidación (lo usa `PatternsPanel`).
+6. El resto de métodos delega de forma transparente en `EnergyApiService` (ofertas, predicciones, dispositivos, liquidaciones, extras, paquetes, plataforma, etc.).
+
+**Diagrama UML:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        «Client»                             │
+│      EnergyDashboard · PatternsPanel · otros paneles        │
+└───────────────────────────┬─────────────────────────────────┘
+                            │ getAvailableOffers()
+                            │ purchaseOffer(id, kwh)
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│                         «Proxy»                             │
+│                     EnergyApiProxy                          │
+├─────────────────────────────────────────────────────────────┤
+│ - api : EnergyApiService  (Singleton)                       │
+│ - offersCache : { data, expiresAt } | null                  │
+├─────────────────────────────────────────────────────────────┤
+│ + getAvailableOffers() : Promise<EnergyOffer[]>             │
+│ + purchaseOffer(id, kwh) : Promise<...>                     │
+│ + invalidateOffers()                                        │
+│ + delegaciones transparentes...                             │
+└───────────────────────────┬─────────────────────────────────┘
+                            │ delega si no hay caché
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    «RealSubject»                            │
+│                  EnergyApiService                           │
+│                  (Singleton HTTP)                           │
+├─────────────────────────────────────────────────────────────┤
+│ GET  /api/energy/offers                                     │
+│ POST /api/energy/offers/{id}/purchase                       │
+│ ...                                                         │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Código completo** (`EnergyApiProxy.ts`):
+
+```typescript
+import EnergyApiService, { type EnergyOffer } from '../singleton/energy-api.service';
+
+/**
+ * Patron Proxy (frontend).
+ *
+ * Envoltorio del cliente HTTP (Singleton) que añade:
+ * - Caché de ofertas disponibles con TTL (virtual/proxy de caché).
+ * - Validación de compras (proxy de protección).
+ */
+class EnergyApiProxy {
+  private static instance: EnergyApiProxy;
+  private api = EnergyApiService.getInstance();
+
+  private offersCache: { data: EnergyOffer[]; expiresAt: number } | null = null;
+
+  private constructor() {}
+
+  static getInstance(): EnergyApiProxy {
+    if (!EnergyApiProxy.instance) {
+      EnergyApiProxy.instance = new EnergyApiProxy();
+    }
+    return EnergyApiProxy.instance;
+  }
+
+  private ttlMs(): number {
+    return 10_000;
+  }
+
+  invalidateOffers() {
+    this.offersCache = null;
+  }
+
+  async getAvailableOffers(): Promise<EnergyOffer[]> {
+    const now = Date.now();
+    if (this.offersCache && now < this.offersCache.expiresAt) {
+      return this.offersCache.data;
+    }
+    const data = await this.api.getAvailableOffers();
+    this.offersCache = { data, expiresAt: now + this.ttlMs() };
+    return data;
+  }
+
+  async purchaseOffer(id: number, kwh: number) {
+    if (kwh < 1) {
+      return { success: false, message: 'Proxy: la compra mínima es 1 kWh' };
+    }
+    if (kwh > 100) {
+      return { success: false, message: 'Proxy: no se pueden comprar más de 100 kWh por operación' };
+    }
+    const result = await this.api.purchaseOffer(id, kwh);
+    if (result.success) {
+      this.invalidateOffers();
+    }
+    return result;
+  }
+
+  // Delegaciones transparentes (resto de métodos)
+  createOffer(offer: EnergyOffer) {
+    return this.api.createOffer(offer);
+  }
+
+  createExpressOffer(data: { producerName: string; totalKwh: number; energyType: string }) {
+    return this.api.createExpressOffer(data);
+  }
+
+  cloneOffer(id: number, adjustments?: Partial<EnergyOffer>) {
+    return this.api.cloneOffer(id, adjustments);
+  }
+
+  getPrototypeTemplates() {
+    return this.api.getPrototypeTemplates();
+  }
+
+  createOfferFromTemplate(data: { energyType: string; producerName: string; totalKwh: number; pricePerKwh?: number }) {
+    return this.api.createOfferFromTemplate(data);
+  }
+
+  getMetrics() {
+    return this.api.getMetrics();
+  }
+
+  getSourceCatalog() {
+    return this.api.getSourceCatalog();
+  }
+
+  getPredictions(production = 0, consumption = 0) {
+    return this.api.getPredictions(production, consumption);
+  }
+
+  getDevices() {
+    return this.api.getDevices();
+  }
+
+  getDeviceTelemetry<T = unknown>(deviceId: string) {
+    return this.api.getDeviceTelemetry<T>(deviceId);
+  }
+
+  getTelemetrySummary() {
+    return this.api.getTelemetrySummary();
+  }
+
+  getSettlementMatrix() {
+    return this.api.getSettlementMatrix();
+  }
+
+  quoteSettlement(data: { profile: string; currency: string; kwh: number; pricePerKwh: number }) {
+    return this.api.quoteSettlement(data);
+  }
+
+  getExtrasCatalog() {
+    return this.api.getExtrasCatalog();
+  }
+
+  quoteWithExtras(data: { kwh: number; pricePerKwh: number; extras: string[] }) {
+    return this.api.quoteWithExtras(data);
+  }
+
+  getSampleBundle() {
+    return this.api.getSampleBundle();
+  }
+
+  evaluateBundle(tree: unknown) {
+    return this.api.evaluateBundle(tree);
+  }
+
+  getPlatformDashboard() {
+    return this.api.getPlatformDashboard();
+  }
+
+  publishSurplus(data: { producerName: string; totalKwh: number; pricePerKwh: number; energyType?: string; description?: string }) {
+    return this.api.publishSurplus(data);
+  }
+
+  buyEnergy(offerId: number, kwh: number, profile = 'residential', currency = 'COP') {
+    return this.api.buyEnergy(offerId, kwh, profile, currency);
+  }
+
+  getSurplusAdvice(production = 0, consumption = 0) {
+    return this.api.getSurplusAdvice(production, consumption);
+  }
+
+  getIoTNetworkStatus() {
+    return this.api.getIoTNetworkStatus();
+  }
+
+  getFlyweightStats() {
+    return this.api.getFlyweightStats();
+  }
+
+  getProxyStats() {
+    return this.api.getProxyStats();
+  }
+}
+
+const energyApiProxy = EnergyApiProxy.getInstance();
+export default energyApiProxy;
+export { EnergyApiProxy };
+```
+
+**Integración con el sistema:**
+
+| Punto de integración | Qué hace |
+|----------------------|----------|
+| `EnergyDashboard.tsx` | Obtiene las ofertas con `energyApiProxy.getAvailableOffers()` y compra con `purchaseOffer()` |
+| `PatternsPanel.tsx` | Consulta `getProxyStats()` y `getFlyweightStats()`, y permite `invalidateOffers()` |
+| `EnergyApiService` | Sigue siendo el cliente HTTP Singleton; el Proxy lo envuelve y delega |
+| `EnergyApiProxy` | Expone también `getPlatformDashboard()`, `buyEnergy()`, etc., para el resto de paneles |
+
+```tsx
+// EnergyDashboard.tsx — el componente usa el Proxy, no el servicio directo
+const api = energyApiProxy;
+
+const data = await api.getAvailableOffers();       // cache hit o petición real
+const result = await api.purchaseOffer(id, kwh);   // validación 1–100 kWh
+```
+
+```tsx
+// PatternsPanel.tsx — estado del Proxy + invalidación manual
+const [p, f] = await Promise.all([
+  api.getProxyStats(),
+  api.getFlyweightStats(),
+]);
+
+// Forzar que la próxima lectura vaya al backend
+api.invalidateOffers();
+```
+
+**Comparativa del Proxy en backend y frontend:**
+
+| Aspecto | Backend (`MarketProxy`) | Frontend (`EnergyApiProxy`) |
+|---------|-------------------------|-----------------------------|
+| Sujeto real | `MarketService` (Singleton) | `EnergyApiService` (Singleton) |
+| Virtual | Sí: `real()` crea el servicio al primer acceso | No: el cliente Singleton se obtiene al construir el Proxy |
+| Caché | Archivo `market_proxy_cache.json` + TTL configurable | Memoria (`offersCache`) + TTL 10 s |
+| Protección | `ConfigService` (1–100 kWh) | Validación local (1–100 kWh) |
+| Invalidación | En cada mutación del mercado | Tras una compra exitosa o `invalidateOffers()` |
+| Métricas | `getCacheStatus()` en `/proxy-stats` | `getProxyStats()` delega en el backend |
+
+> **Nota:** el TTL del backend se lee de `ConfigService` (`offersCacheTtl`), por lo que puede cambiarse sin tocar el Proxy; el del frontend está fijado en `ttlMs()` (10 000 ms) para mantener la coherencia con la caché del backend.
+
+---
+
+## Integración de Flyweight y Proxy en la interfaz
+
+El componente **`PatternsPanel`** es el cliente visual de ambos patrones. Al montarse consulta, en paralelo, las métricas del backend y del frontend:
+
+- **Flyweight:** muestra los tres descriptores compartidos (`list()`), las instancias creadas, el total de usos y los usos por tipo.
+- **Proxy:** muestra si la caché es válida, cuántas entradas tiene, el TTL, el tiempo restante y la política de compras (mínimo/máximo). También permite **forzar la invalidación** de la caché del frontend.
+
+**Archivo:** `frontend/src/components/PatternsPanel.tsx`
+
+```tsx
+const api = energyApiProxy;
+const fly = energyTypeFlyweightFactory;
+
+const [p, f] = await Promise.all([
+  api.getProxyStats(),        // Proxy: caché + política (backend)
+  api.getFlyweightStats(),    // Flyweight: pool compartido (backend)
+]);
+
+// Flyweight del frontend: los 3 descriptores compartidos
+fly.list().map((d) => `${d.emoji} ${d.type}`).join(' · ');
+
+// Proxy del frontend: invalidación manual de la caché
+api.invalidateOffers();
+```
+
+**Endpoints que alimentan el panel:**
+
+| Método | Ruta | Patrón | Qué devuelve |
+|--------|------|--------|--------------|
+| GET | `/api/energy/flyweight-stats` | Flyweight | Instancias compartidas, usos, ahorro y descriptores |
+| GET | `/api/energy/proxy-stats` | Proxy | Estado de la caché y política de compras |
+| GET | `/api/energy/offers` | Flyweight + Proxy | Ofertas cacheadas y enriquecidas con `energySource` |
+
+**Demostración rápida:**
+
+1. Abrir el panel **Flyweight y Proxy** en la interfaz.
+2. Pulsar **Actualizar** dos veces: la segunda lectura puede venir de la caché (dependiendo del TTL).
+3. Ver el cambio de **Caché válida: Sí/No**, las entradas y el tiempo restante.
+4. Intentar comprar **999 kWh** desde el dashboard: el Proxy responde con el mensaje de bloqueo.
+5. Publicar o clonar una oferta: la caché se invalida y la siguiente lectura refleja el cambio.
+6. En Flyweight, comparar **instancias creadas (3)** con el **total de usos** y el campo `savedInstances`.
+
+---
+
 # Guía de Ejecución
 
 ## Backend (Laravel)
@@ -4315,49 +5569,5 @@ Hasta el momento se han implementado y documentado en este README los siguientes
 | 10 | **Facade** | `EnergyPlatformFacade` (PHP) + `PlatformFacade` (TS) delegando en `EnergyApiService` |
 | 11 | **Flyweight** | `EnergySourceFlyweightFactory` (PHP) + `EnergyTypeFlyweightFactory` (TS) |
 | 12 | **Proxy** | `MarketProxy` (PHP: virtual, caché, protección) + `EnergyApiProxy` (TS: caché TTL + protección) |
-
-## 23. `EnergySourceFlyweightFactory` (Flyweight — Backend)
-
-**Archivo:** `backend-laravel/app/Patterns/Flyweights/EnergySourceFlyweightFactory.php`
-
-**En qué consiste dentro del proyecto:** Singleton que comparte una única instancia de `EnergySource` por tipo (`solar`, `wind`, `hydro`). El estado intrínseco (nombre, descripción, eficiencia, color) se guarda en el pool y se reutiliza; el estado extrínseco (productor, kWh, precio, fecha) vive en `EnergyOffer`. Así, todas las ofertas comparten descriptores.
-
-**Endpoints:** `GET /api/energy/flyweight-stats` (métricas) · `GET /api/energy/offers` ahora enriquece cada oferta con `energySource` (descriptor compartido).
-
-**Diagrama UML (resumen):**
-```
-FlyweightFactory (Singleton) → pool: Map<tipo, EnergySource>  (3 instancias compartidas)
-Ofertas N → usan el mismo descriptor (estado intrínseco compartido)
-```
-
-## 24. `EnergyTypeFlyweightFactory` (Flyweight — Frontend)
-
-**Archivo:** `frontend/src/patterns/flyweight/EnergyTypeFlyweightFactory.ts`
-
-**En qué consiste:** Reutiliza descriptores visuales (emoji, imagen, colores) por tipo. Usado en `EnergyDashboard` y `PatternsPanel`.
-
-## 25. `MarketProxy` (Proxy — Backend)
-
-**Archivo:** `backend-laravel/app/Patterns/Proxies/MarketProxy.php`
-
-**En qué consiste:** Sustituto de `MarketService` con:
-- **Proxy virtual:** crea `MarketService` solo al primer acceso.
-- **Proxy de caché:** cachea `getAvailableOffers()` con TTL (configurable) e invalida la caché al modificar el mercado.
-- **Proxy de protección:** valida compras (mínimo/máximo desde `ConfigService`), bloquea fuera de política antes de llegar al sujeto real.
-
-**Integración:** `EnergyController` usa `MarketProxy` para `getAvailableOffers()` y `purchaseOffer()`.
-
-## 26. `EnergyApiProxy` (Proxy — Frontend)
-
-**Archivo:** `frontend/src/patterns/proxy/EnergyApiProxy.ts`
-
-**En qué consiste:** Envoltorio de `EnergyApiService` con caché TTL de ofertas y validación de compras (1–100 kWh). `EnergyDashboard` lo usa.
-
-## Componente `PatternsPanel`
-
-**Archivo:** `frontend/src/components/PatternsPanel.tsx`
-
-Muestra estadísticas en tiempo real de Flyweight y Proxy (frontend + backend), con estado de caché y política de compras, siguiendo el diseño existente.
-
 
 *Próximamente se implementará el siguiente patrón de diseño...*
