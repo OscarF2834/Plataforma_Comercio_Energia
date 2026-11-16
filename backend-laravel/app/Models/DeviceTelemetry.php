@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Patterns\Visitors\MarketElementVisitor;
+
 /**
  * Patron Adapter - modelo de dominio normalizado.
  * Todos los Adapter (SCADA legado, inversor PV) entregan la telemetria en este
@@ -47,5 +49,14 @@ class DeviceTelemetry
             'rawReading' => $this->rawReading,
             'metrics' => $this->metrics,
         ];
+    }
+
+    /**
+     * Patron Visitor — acepta un visitante (doble despacho):
+     * la telemetría decide qué método visit corresponde a su clase.
+     */
+    public function accept(MarketElementVisitor $visitor): void
+    {
+        $visitor->visitDevice($this);
     }
 }

@@ -2,6 +2,10 @@ import { useState } from 'react';
 import EnergyApiService from '../patterns/singleton/energy-api.service';
 import { EnergyOfferBuilder } from '../patterns/builder/EnergyOfferBuilder';
 import { OfferDirector } from '../patterns/builder/OfferDirector';
+import { OfferDraftMemento } from '../patterns/memento/OfferDraftMemento';
+import { offerDraftCaretaker } from '../patterns/memento/OfferDraftCaretaker';
+import PlatformMediator from '../patterns/mediator/PlatformMediator';
+import marketEventsSubject from '../patterns/observer/MarketEventsSubject';
 import EnergyCatalog from './EnergyCatalog';
 
 interface Props {
@@ -30,6 +34,16 @@ export default function CreateOffer({ onOfferCreated, selectedEnergyType, onSele
 
   const api = EnergyApiService.getInstance();
 
+  // Patron Memento: guardian de las instantáneas del asistente
+  // (instancia única compartida de OfferDraftCaretaker).
+  const caretaker = offerDraftCaretaker;
+
+  // Patron Mediator: este componente es un colega de la plataforma;
+  // publica eventos al mediador en lugar de avisar a otros componentes
+  // directamente.
+  const mediator = PlatformMediator.getInstance();
+  mediator.registerColleague({ name: 'Publicar oferta (CreateOffer)' });
+
   const qty = parseFloat(totalKwh);
   const price = parseFloat(pricePerKwh);
 
@@ -54,6 +68,42 @@ export default function CreateOffer({ onOfferCreated, selectedEnergyType, onSele
     setError('');
     setStep(1);
     onSelectEnergyType?.(null);
+    caretaker.clear();
+  };
+
+  // ----------------------------------------------------------------
+  // Patron Memento: el asistente (originator) captura su estado en
+  // cada avance de paso y lo restaura desde la instantánea.
+  // ----------------------------------------------------------------
+
+  const captureDraft = (): OfferDraftMemento =>
+    OfferDraftMemento.capture({
+      producerName,
+      energyType: selectedEnergyType ?? null,
+      totalKwh,
+      pricePerKwh,
+      description,
+      step,
+    });
+
+  const restoreDraft = (memento: OfferDraftMemento | null) => {
+    if (!memento) return;
+    setProducerName(memento.producerName);
+    setTotalKwh(memento.totalKwh);
+    setPricePerKwh(memento.pricePerKwh);
+    setDescription(memento.description);
+    setStep(memento.step);
+    onSelectEnergyType?.(memento.energyType);
+    setError('');
+  };
+
+  const handleUndoDraft = () => restoreDraft(caretaker.undo());
+  const handleRedoDraft = () => restoreDraft(caretaker.redo());
+
+  const goNextStep = () => {
+    if (!stepValid[step]) return;
+    caretaker.save(captureDraft());   // instantánea ANTES de avanzar
+    setStep((s) => s + 1);
   };
 
   const buildCustomOffer = () =>
@@ -84,7 +134,12 @@ export default function CreateOffer({ onOfferCreated, selectedEnergyType, onSele
       const result = await api.createOffer(offer);
       alert(`Oferta #${result.id} publicada correctamente.`);
       resetAll();
-      onOfferCreated();
+      // Patron Mediator: publica el evento en lugar de avisar por props.
+      mediator.publish('offer:created', `Oferta #${result.id} de ${offer.producerName}`);
+      // Patron Observer: un nuevo excedente en el mercado es un cambio de
+      // estado; el sujeto lo notifica a los observadores suscritos.
+      marketEventsSubject.notifyOfferPublished(result, `Oferta #${result.id} de ${offer.producerName} publicada`);
+      onOfferCreated?.();
     } catch {
       setError('No se pudo publicar la oferta. Revisa los datos.');
     } finally {
@@ -108,7 +163,12 @@ export default function CreateOffer({ onOfferCreated, selectedEnergyType, onSele
       });
       alert(`Oferta expres #${result.id} publicada ($${result.pricePerKwh} COP/kWh por defecto).`);
       resetAll();
-      onOfferCreated();
+      // Patron Mediator: publica el evento en lugar de avisar por props.
+      mediator.publish('offer:created', `Oferta expres #${result.id} de ${producerName.trim()}`);
+      // Patron Observer: un nuevo excedente en el mercado es un cambio de
+      // estado; el sujeto lo notifica a los observadores suscritos.
+      marketEventsSubject.notifyOfferPublished(result, `Oferta expres #${result.id} de ${producerName.trim()} publicada`);
+      onOfferCreated?.();
     } catch {
       setError('No se pudo publicar la oferta expres. Revisa los datos.');
     } finally {
@@ -257,26 +317,52 @@ export default function CreateOffer({ onOfferCreated, selectedEnergyType, onSele
         )}
       </div>
 
+      {caretaker.canUndo() && (
+        <p style={styles.mementoHint} title="Historial de instantáneas del borrador (Memento)">
+          ⎘ Memento: {caretaker.history().length} borrador(es) guardados · último: {caretaker.history().slice(-1)[0]}
+        </p>
+      )}
+
       {error && <p role="alert" style={styles.error}>{error}</p>}
 
       <div style={styles.navRow}>
-        <button onClick={() => setStep((s) => Math.max(1, s - 1))} disabled={step === 1} style={styles.backButton}>
-          Atras
-        </button>
-        {step < 6 && (
+        <div style={styles.mementoRow}>
           <button
-            onClick={() => stepValid[step] && setStep((s) => s + 1)}
-            disabled={!stepValid[step]}
-            style={styles.button}
+            onClick={handleUndoDraft}
+            disabled={!caretaker.canUndo()}
+            title="Memento: restaurar el borrador anterior"
+            style={{ ...styles.backButton, opacity: caretaker.canUndo() ? 1 : 0.5 }}
           >
-            Siguiente
+            ↶ Deshacer
           </button>
-        )}
-        {step === 6 && (
-          <button onClick={resetAll} style={styles.backButton}>
-            Reiniciar
+          <button
+            onClick={handleRedoDraft}
+            disabled={!caretaker.canRedo()}
+            title="Memento: rehacer el borrador restaurado"
+            style={{ ...styles.backButton, opacity: caretaker.canRedo() ? 1 : 0.5 }}
+          >
+            ↷ Rehacer
           </button>
-        )}
+        </div>
+        <div style={styles.navGroup}>
+          <button onClick={() => setStep((s) => Math.max(1, s - 1))} disabled={step === 1} style={styles.backButton}>
+            Atras
+          </button>
+          {step < 6 && (
+            <button
+              onClick={goNextStep}
+              disabled={!stepValid[step]}
+              style={styles.button}
+            >
+              Siguiente
+            </button>
+          )}
+          {step === 6 && (
+            <button onClick={resetAll} style={styles.backButton}>
+              Reiniciar
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -387,7 +473,23 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     gap: '12px',
     justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
     marginBottom: '16px',
+  },
+  navGroup: {
+    display: 'flex',
+    gap: '12px',
+  },
+  mementoRow: {
+    display: 'flex',
+    gap: '8px',
+  },
+  mementoHint: {
+    color: '#777',
+    fontSize: '0.78rem',
+    margin: '0 0 8px 0',
+    lineHeight: 1.4,
   },
   backButton: {
     padding: '10px 16px',

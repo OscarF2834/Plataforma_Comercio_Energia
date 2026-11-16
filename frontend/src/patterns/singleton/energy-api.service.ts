@@ -359,6 +359,79 @@ class EnergyApiService {
     if (!response.ok) throw new Error('Error al obtener estadísticas Proxy');
     return response.json();
   }
+
+  // ----------------------------------------------------------------
+  // Patron Iterator: recorrido del mercado por estrategia (backend).
+  // ----------------------------------------------------------------
+
+  async getIteratedOffers(strategy: string, energyType = '') {
+    const params = new URLSearchParams({ strategy });
+    if (energyType) params.set('energyType', energyType);
+    const response = await fetch(`${this.baseUrl}/energy/offers/iterate?${params.toString()}`);
+    if (!response.ok) throw new Error('Error al recorrer las ofertas con el Iterator');
+    return response.json();
+  }
+
+  // ----------------------------------------------------------------
+  // Patron Mediator: estadísticas de la coordinación compra/venta.
+  // ----------------------------------------------------------------
+
+  async getMediatorStats() {
+    const response = await fetch(`${this.baseUrl}/energy/mediator/stats`);
+    if (!response.ok) throw new Error('Error al obtener estadísticas Mediator');
+    return response.json();
+  }
+
+  // ----------------------------------------------------------------
+  // Patron Memento: historial de instantáneas del mercado (backend)
+  // y deshacer la última compra.
+  // ----------------------------------------------------------------
+
+  async getMarketHistory() {
+    const response = await fetch(`${this.baseUrl}/energy/market/history`);
+    if (!response.ok) throw new Error('Error al obtener el historial de instantáneas');
+    return response.json();
+  }
+
+  async undoLastPurchase() {
+    const response = await fetch(`${this.baseUrl}/energy/market/undo`, { method: 'POST' });
+    // El 404 es una respuesta válida del dominio: "no hay compras para
+    // deshacer", así que se devuelve el cuerpo tal cual.
+    if (!response.ok && response.status !== 404) {
+      throw new Error('Error al deshacer la última compra');
+    }
+    return response.json();
+  }
+
+  // ----------------------------------------------------------------
+  // Patron Observer: observadores del mercado y eventos notificados.
+  // ----------------------------------------------------------------
+
+  async getObserverStats() {
+    const response = await fetch(`${this.baseUrl}/energy/observer/stats`);
+    if (!response.ok) throw new Error('Error al obtener estadísticas Observer');
+    return response.json();
+  }
+
+  // ----------------------------------------------------------------
+  // Patron State: ciclo de vida de las ofertas (backend).
+  // ----------------------------------------------------------------
+
+  async getOfferStates() {
+    const response = await fetch(`${this.baseUrl}/energy/offers/states`);
+    if (!response.ok) throw new Error('Error al obtener los estados de las ofertas');
+    return response.json();
+  }
+
+  // ----------------------------------------------------------------
+  // Patron Visitor: reporte/auditoría del inventario del mercado.
+  // ----------------------------------------------------------------
+
+  async getVisitorReport(type: 'report' | 'audit') {
+    const response = await fetch(`${this.baseUrl}/energy/visitor/report?type=${type}`);
+    if (!response.ok) throw new Error('Error al recorrer el inventario con el Visitor');
+    return response.json();
+  }
 }
 
 export default EnergyApiService;

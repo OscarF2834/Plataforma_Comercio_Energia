@@ -40,6 +40,12 @@ El proyecto está planteado como un **prototipo funcional académico**. No tendr
 - [24. `EnergyTypeFlyweightFactory` (Flyweight — Frontend)](#24-energytypeflyweightfactory--frontend)
 - [25. `MarketProxy` (Proxy — Backend)](#25-marketproxy--backend)
 - [26. `EnergyApiProxy` (Proxy — Frontend)](#26-energyapiproxy--frontend)
+- [27. `OfferCollection` / `OfferIterator` (Iterator — Backend)](#27-offercollection--offeriterator--backend)
+- [28. `OfferCollection` / `OfferIterator` (Iterator — Frontend)](#28-offercollection--offeriterator--frontend)
+- [29. `TransactionMediator` (Mediator — Backend)](#29-transactionmediator--backend)
+- [30. `PlatformMediator` (Mediator — Frontend)](#30-platformmediator--frontend)
+- [31. `MarketMemento` / `MarketCaretaker` (Memento — Backend)](#31-marketmemento--marketcaretaker--backend)
+- [32. `OfferDraftMemento` / `OfferDraftCaretaker` (Memento — Frontend)](#32-offerdraftmemento--offerdraftcaretaker--frontend)
 
 ---
 
@@ -65,7 +71,7 @@ Desarrollar una plataforma web para gestionar el intercambio de excedentes de en
 | Frontend | React + TypeScript + Vite |
 | Backend | Laravel + PHP |
 | Base de datos | Memoria (in-memory) persistida en JSON |
-| Patrones de diseño | Singleton, Factory Method, Abstract Method, Builder, Prototype, Adapter, Bridge, Decorator, Composite, Facade, Flyweight, Proxy |
+| Patrones de diseño | Singleton, Factory Method, Abstract Method, Builder, Prototype, Adapter, Bridge, Decorator, Composite, Facade, Flyweight, Proxy, Iterator, Mediator, Memento |
 
 ---
 
@@ -369,6 +375,12 @@ De esta manera, el proyecto permitirá demostrar el funcionamiento de un mercado
 | 24 | [Flyweight](#24-energytypeflyweightfactory--frontend) · `EnergyTypeFlyweightFactory` | Frontend | [Ir](#24-energytypeflyweightfactory--frontend) |
 | 25 | [Proxy](#25-marketproxy--backend) · `MarketProxy` | Backend | [Ir](#25-marketproxy--backend) |
 | 26 | [Proxy](#26-energyapiproxy--frontend) · `EnergyApiProxy` | Frontend | [Ir](#26-energyapiproxy--frontend) |
+| 27 | [Iterator](#27-offercollection--offeriterator--backend) · `OfferCollection` + `OfferIterator` | Backend | [Ir](#27-offercollection--offeriterator--backend) |
+| 28 | [Iterator](#28-offercollection--offeriterator--frontend) · `OfferCollection` + `OfferIterator` | Frontend | [Ir](#28-offercollection--offeriterator--frontend) |
+| 29 | [Mediator](#29-transactionmediator--backend) · `TransactionMediator` | Backend | [Ir](#29-transactionmediator--backend) |
+| 30 | [Mediator](#30-platformmediator--frontend) · `PlatformMediator` | Frontend | [Ir](#30-platformmediator--frontend) |
+| 31 | [Memento](#31-marketmemento--marketcaretaker--backend) · `MarketMemento` + `MarketCaretaker` | Backend | [Ir](#31-marketmemento--marketcaretaker--backend) |
+| 32 | [Memento](#32-offerdraftmemento--offerdraftcaretaker--frontend) · `OfferDraftMemento` + `OfferDraftCaretaker` | Frontend | [Ir](#32-offerdraftmemento--offerdraftcaretaker--frontend) |
 
 ---
 
@@ -5369,6 +5381,892 @@ api.invalidateOffers();
 
 ---
 
+# Tercer corte
+
+En este tercer corte se implementan los **patrones de comportamiento** que completan la familia GoF aplicada al proyecto:
+
+- **Iterator** — recorrer el mercado de excedentes con distintas estrategias sin exponer la colección interna.
+- **Mediator** — coordinar la publicación y compra de energía entre los subsistemas (mercado, registro de actividad, historial) sin que se conozcan entre sí.
+- **Memento** — capturar instantáneas del estado para deshacer operaciones (borrador de la publicación y compras del mercado).
+
+Los tres siguen la misma estructura de documentación de los cortes anteriores: qué es dentro del proyecto, implementación en **backend (PHP)** y en **frontend (TypeScript)**, diagrama UML, código clave y su integración con los objetivos del proyecto (consultar/filtrar excedentes, registrar transacciones, actualizar automáticamente la energía disponible y apoyar la predicción de compra/venta).
+
+---
+
+# Patrón Iterator
+
+## ¿Qué es dentro del proyecto?
+
+El **Iterator** se usa en el proyecto para **recorrer el mercado de excedentes energéticos sin exponer su estructura interna** (el arreglo de ofertas de `MarketService`). En lugar de que los controladores y componentes hagan `foreach` sobre la colección, una **colección agregada** (`OfferCollection`) crea **iteradores concretos** según la estrategia de recorrido:
+
+- `AvailableOfferIterator` → recorre **solo las ofertas con energía disponible** (objetivo: *consultar los excedentes disponibles*).
+- `CheapestOfferIterator` → recorre **de la oferta más barata a la más cara** (objetivo: apoyar la *compra* del mejor precio).
+- `EnergyTypeOfferIterator` → recorre **solo las ofertas de un tipo de energía** solar/eólica/hidráulica (objetivo: *clasificar y administrar los tipos de energía*).
+
+El recorrido siempre usa la misma interfaz `hasNext()/next()`, de modo que el cliente no sabe (ni le importa) si el mercado está filtrado, ordenado o tal cual fue registrado. Se ejecuta **en el backend** (endpoint `GET /api/energy/offers/iterate`) y **en el frontend** (panel de patrones de comportamiento).
+
+**Implementaciones actuales (2):**
+
+- `OfferCollection` + `OfferIterator` — Backend (PHP)
+- `OfferCollection` + `OfferIterator` — Frontend (TypeScript)
+
+---
+
+## 27. `OfferCollection` / `OfferIterator` — Backend
+
+**Archivo:** `backend-laravel/app/Patterns/Iterators/` (`OfferIterator.php`, `OfferCollection.php`, `AvailableOfferIterator.php`, `CheapestOfferIterator.php`, `EnergyTypeOfferIterator.php`)
+
+**En qué consiste dentro del proyecto:** `OfferIterator` es la interfaz del iterador (`hasNext()`, `next()`, `rewind()`); `AvailableOfferIterator`, `CheapestOfferIterator` y `EnergyTypeOfferIterator` son los iteradores concretos que filtran u ordenan el recorrido; y `OfferCollection` es la **colección agregada** que envuelve las ofertas de `MarketService` y crea el iterador correcto según la estrategia (Factory Method interno). El endpoint `GET /api/energy/offers/iterate?strategy=available|cheapest|type&energyType=solar` recorre el mercado con la interfaz y devuelve las ofertas en el orden del recorrido, junto con las métricas calculadas durante la caminata (total de kWh disponibles y precio promedio).
+
+**Diagrama UML:**
+
+```
+┌──────────────────────────────────────────────┐
+│         «Aggregate / Colección»              │
+│             OfferCollection                  │
+├──────────────────────────────────────────────┤
+│ - offers : EnergyOffer[]                     │
+├──────────────────────────────────────────────┤
+│ + createIterator(string, params) :           │
+│        OfferIterator     (Factory Method)    │
+└──────────────────┬───────────────────────────┘
+                   │  crea
+                   ▼
+┌──────────────────────────────────────────────┐
+│            «Iterator (interfaz)»             │
+│                OfferIterator                 │
+├──────────────────────────────────────────────┤
+│ + hasNext() : bool                           │
+│ + next() : ?EnergyOffer                      │
+│ + rewind() : void                            │
+└──────────────────▲───────────▲───────────▲───┘
+                   │           │           │  implementan
+   ┌───────────────┴──┐  ┌─────┴──────┐  ┌─┴──────────────────┐
+   │ AvailableOffer   │  │ Cheapest   │  │ EnergyTypeOffer    │
+   │ Iterator         │  │ OfferIter. │  │ Iterator           │
+   │ (availableKwh>0) │  │ (precio ↑) │  │ (energyType == x)  │
+   └──────────────────┘  └────────────┘  └────────────────────┘
+                   ▲
+                   │  envuelve las ofertas de
+┌──────────────────────────────────────────────┐
+│ MarketService (Singleton) → MarketProxy      │
+│  + getOfferCollection() : OfferCollection    │
+└──────────────────────────────────────────────┘
+```
+
+**Código clave del agregado** (`OfferCollection.php`):
+
+```php
+class OfferCollection
+{
+    public function __construct(private array $offers) {}
+
+    public const STRATEGIES = ['type', 'cheapest', 'available'];
+
+    // Factory Method del Iterator: crea el iterador concreto segun la
+    // estrategia. "type" exige el parámetro energyType.
+    public function createIterator(string $strategy, array $params = []): OfferIterator
+    {
+        return match (strtolower($strategy)) {
+            'type'      => new EnergyTypeOfferIterator($this->offers, strtolower($params['energyType'] ?? '')),
+            'cheapest'  => new CheapestOfferIterator($this->offers),
+            'available' => new AvailableOfferIterator($this->offers),
+            default     => throw new \InvalidArgumentException("Estrategia de iteracion no soportada: {$strategy}"),
+        };
+    }
+}
+```
+
+**Iterador concreto** (`CheapestOfferIterator.php`):
+
+```php
+class CheapestOfferIterator implements OfferIterator
+{
+    private array $sorted;
+    private int $position = 0;
+
+    public function __construct(array $offers)
+    {
+        $sorted = $offers;
+        usort($sorted, fn (EnergyOffer $a, EnergyOffer $b) => $a->pricePerKwh <=> $b->pricePerKwh);
+        $this->sorted = array_values($sorted);
+    }
+
+    public function hasNext(): bool
+    {
+        return $this->position < count($this->sorted);
+    }
+
+    public function next(): ?EnergyOffer
+    {
+        if (!$this->hasNext()) {
+            return null;
+        }
+        return $this->sorted[$this->position++];
+    }
+
+    public function rewind(): void
+    {
+        $this->position = 0;
+    }
+}
+```
+
+**Uso en `MarketService`** — expone la colección sin revelar el arreglo interno:
+
+```php
+public function getOfferCollection(): OfferCollection
+{
+    return new OfferCollection($this->offers);
+}
+```
+
+**Uso en `EnergyController`** (endpoint `GET /api/energy/offers/iterate`):
+
+```php
+public function iterateOffers(Request $request): JsonResponse
+{
+    $strategy   = (string) $request->query('strategy', 'available');
+    $energyType = strtolower((string) $request->query('energyType', ''));
+
+    // La colección agregada crea el iterador concreto según la estrategia.
+    $iterator = $this->marketProxy->getOfferCollection()
+        ->createIterator($strategy, ['energyType' => $energyType]);
+
+    // Recorrido con la interfaz hasNext()/next(): el cliente nunca
+    // toca el arreglo de ofertas del mercado.
+    $offers = [];
+    $walked = 0;
+    while ($iterator->hasNext()) {
+        $offer = $iterator->next();
+        $walked++;
+        if ($offer !== null) {
+            $offers[] = $offer->toArray();
+        }
+    }
+    // ...devuelve estrategia, total, kWh disponibles y precio promedio.
+}
+```
+
+**Ejemplo de respuesta:**
+
+```json
+{
+  "strategy": "cheapest",
+  "filters": [],
+  "total": 2,
+  "walked": 2,
+  "totalAvailableKwh": 21,
+  "avgPricePerKwh": 475,
+  "offers": [
+    { "id": 2, "producerName": "Ivan", "availableKwh": 6, "pricePerKwh": 450 },
+    { "id": 1, "producerName": "Oscar", "availableKwh": 15, "pricePerKwh": 500 }
+  ]
+}
+```
+
+---
+
+## 28. `OfferCollection` / `OfferIterator` — Frontend
+
+**Archivo:** `frontend/src/patterns/iterator/` (`OfferIterator.ts`, `OfferCollection.ts`, `AvailableOfferIterator.ts`, `CheapestOfferIterator.ts`, `EnergyTypeIterator.ts`)
+
+**En qué consiste dentro del proyecto:** Las mismas cuatro clases traducidas a TypeScript. El **panel de patrones de comportamiento** (`BehavioralPatternsPanel`) recorre las ofertas del mercado en el **frontend** con la colección local (`new OfferCollection(ofertas).createIterator(estrategia)` y el bucle `hasNext()/next()`) y, en la misma acción, consulta el endpoint del backend para mostrar la **misma estrategia ejecutada en PHP**. El usuario elige la estrategia (por tipo, más barata primero, solo disponibles) y ve el orden del recorrido y las métricas.
+
+**Diagrama UML:**
+
+```
+┌──────────────────────────────────────────────┐
+│         «Aggregate / Colección»              │
+│             OfferCollection                  │
+├──────────────────────────────────────────────┤
+│ - offers : EnergyOffer[]                     │
+│ + createIterator(strategy, params)           │
+│ + collect(strategy, params)                  │
+└──────────────────┬───────────────────────────┘
+                   │  crea
+                   ▼
+┌──────────────────────────────────────────────┐
+│        «Iterator (interfaz)»                 │
+│        interface OfferIterator               │
+├──────────────────────────────────────────────┤
+│ + hasNext() : boolean                        │
+│ + next() : EnergyOffer | null                │
+│ + rewind() : void                            │
+└──────▲──────────────▲──────────────▲────────┘
+       │              │              │
+┌──────┴───────┐ ┌────┴───────┐ ┌────┴─────────┐
+│ EnergyType   │ │ Cheapest   │ │ Available    │
+│ Iterator     │ │ OfferIter. │ │ OfferIter.   │
+└──────────────┘ └────────────┘ └──────────────┘
+       ▲
+       │  usa en el panel
+┌────────────────────────────────────────────────────────────┐
+│        BehavioralPatternsPanel (React)                     │
+│  • Selector de estrategia (type/cheapest/available)         │
+│  • Recorrido local: hasNext()/next() sobre OfferCollection  │
+│  • Recorrido backend: GET /api/energy/offers/iterate        │
+└────────────────────────────────────────────────────────────┘
+```
+
+**Código clave** (`OfferCollection.ts`):
+
+```typescript
+export class OfferCollection {
+  public static readonly STRATEGIES = ['type', 'cheapest', 'available'] as const;
+
+  constructor(private offers: EnergyOffer[]) {}
+
+  /** Factory Method del Iterator: crea el iterador concreto por estrategia. */
+  createIterator(strategy: string, params: { energyType?: string } = {}): OfferIterator {
+    switch (strategy.toLowerCase()) {
+      case 'type':      return new EnergyTypeIterator(this.offers, params.energyType ?? '');
+      case 'cheapest':  return new CheapestOfferIterator(this.offers);
+      case 'available': return new AvailableOfferIterator(this.offers);
+      default: throw new Error(`Estrategia de iteracion no soportada: ${strategy}`);
+    }
+  }
+}
+```
+
+**Uso ligado al sistema en `BehavioralPatternsPanel`:**
+
+```tsx
+// 1) El patrón corre en el FRONTEND: la colección local crea el
+//    iterador concreto y lo recorremos con hasNext()/next().
+const offers = await api.getAvailableOffers();
+const collection = new OfferCollection(offers);
+const iterator = collection.createIterator(strategy, { energyType });
+const walked: EnergyOffer[] = [];
+let steps = 0;
+while (iterator.hasNext()) {
+  const offer = iterator.next();
+  steps++;
+  if (offer) walked.push(offer);
+}
+
+// 2) La MISMA estrategia ejecutada en el BACKEND (PHP).
+setBackendIterated(await api.getIteratedOffers(strategy, energyType));
+```
+
+---
+
+# Patrón Mediator
+
+## ¿Qué es dentro del proyecto?
+
+El **Mediator** se usa en el proyecto para **coordinar la compra y venta de excedentes entre subsistemas sin que estos se conozcan entre sí**. Antes, el controlador orquestaba a mano cada compra: comprar en el mercado → incrementar el contador de transacciones → escribir el log. Ahora esa coreografía vive en un **mediador central** (`TransactionMediator`) que comunica a tres **colegas**:
+
+- `MarketServiceColleague` — encapsula el mercado real (`MarketProxy` sobre el Singleton `MarketService`).
+- `LoggerColleague` — encapsula el registro de actividad (`LoggerService`).
+- `HistoryColleague` — encapsula el historial de instantáneas (`MarketCaretaker`, del patrón Memento).
+
+Los colegas **solo hablan con el mediador**: el mercado no sabe que el logger existe, y el historial pide la instantánea del mercado a través del mediador (`requestMemento`). En el **frontend**, `PlatformMediator` cumple el mismo rol entre los componentes de React: los paneles publican eventos (`offer:created`) y la App se suscribe, en lugar de acoplarse con props encadenadas.
+
+**Implementaciones actuales (2):**
+
+- `TransactionMediator` — Backend (PHP)
+- `PlatformMediator` — Frontend (TypeScript)
+
+---
+
+## 29. `TransactionMediator` — Backend
+
+**Archivo:** `backend-laravel/app/Patterns/Mediators/` (`TransactionMediator.php`, `Colleague.php`, `MarketServiceColleague.php`, `LoggerColleague.php`, `HistoryColleague.php`)
+
+**En qué consiste dentro del proyecto:** `Colleague` es la interfaz de los colegas (`setMediator`, `getName`); los tres colegas concretos encapsulan mercado, logger e historial; y `TransactionMediator` es el mediador concreto con dos peticiones principales: `publishOffer()` (publicar un excedente: mercado + contador de ofertas + log) y `purchaseOffer()` (comprar energía: **instantánea previa** del mercado, compra protegida por el Proxy y registro del resultado). También expone `undoLastPurchase()` (deshacer la última compra restaurando la instantánea) y `getStats()` (estadísticas para el panel: colegas, eventos coordinados e instantáneas). El registro de eventos se persiste en `storage/app/mediator_events.json`. Los endpoints `POST /api/energy/offers` y `POST /api/energy/offers/{id}/purchase` ahora pasan por el mediador, y `GET /api/energy/mediator/stats` expone sus estadísticas.
+
+**Diagrama UML:**
+
+```
+                        ┌────────────────────────────────────┐
+                        │     «Mediator (concreto)»          │
+                        │      TransactionMediator           │
+                        ├────────────────────────────────────┤
+                        │ - colleagues : Colleague[]         │
+                        │ - eventLog : array (persistido)    │
+                        ├────────────────────────────────────┤
+                        │ + publishOffer(data) : EnergyOffer │
+                        │ + purchaseOffer(id, kwh) : array   │
+                        │ + undoLastPurchase() : array       │
+                        │ + notify(sender, event, payload)   │
+                        │ + requestMemento(reason)           │
+                        │ + restoreMarket(memento, reason)   │
+                        │ + getStats() : array               │
+                        └───────┬───────────┬───────────┬───┘
+                                │ coordina  │           │
+              ┌─────────────────┘           │           └─────────────────┐
+              ▼                             ▼                             ▼
+┌───────────────────────────┐ ┌──────────────────────────┐ ┌──────────────────────────┐
+│ MarketServiceColleague    │ │ LoggerColleague          │ │ HistoryColleague         │
+│ «Colleague»               │ │ «Colleague»              │ │ «Colleague»              │
+├───────────────────────────┤ ├──────────────────────────┤ ├──────────────────────────┤
+│ - market : MarketProxy    │ │ - logger : LoggerService │ │ - caretaker: Market-     │
+├───────────────────────────┤ ├──────────────────────────┤ │   Caretaker (Memento)    │
+│ + registerOffer(data)     │ │ + onOfferRegistered()    │ ├──────────────────────────┤
+│ + purchaseOffer(id, kwh)  │ │ + onPurchaseSucceeded()  │ │ + snapshotBefore(reason) │
+│ + createMemento(reason)   │ │ + onPurchaseRejected()   │ │ + undo() : ?MarketMemento│
+│ + restoreFromMemento()    │ │ + onMarketRestored()     │ │ + history() / count()    │
+└───────────────────────────┘ └──────────────────────────┘ └──────────────────────────┘
+        │                              │                              │
+        ▼                              ▼                              ▼
+┌──────────────────┐        ┌──────────────────┐          ┌──────────────────────┐
+│ MarketService    │        │ LoggerService    │          │ MarketCaretaker      │
+│ (Singleton)      │        │ (Singleton)      │          │ (patrón Memento)     │
+│ vía MarketProxy  │        │                  │          │ storage/app/…json    │
+└──────────────────┘        └──────────────────┘          └──────────────────────┘
+```
+
+**Código clave del mediador** (`TransactionMediator.php`):
+
+```php
+class TransactionMediator
+{
+    private array $colleagues = [];
+    private array $eventLog = [];
+
+    public function __construct(
+        private MarketServiceColleague $market,
+        private LoggerColleague $logger,
+        private HistoryColleague $history,
+    ) {
+        // El mediador se inyecta en cada colega al registrarlo.
+        foreach ([$market, $logger, $history] as $colleague) {
+            $colleague->setMediator($this);
+            $this->colleagues[] = $colleague;
+        }
+    }
+
+    public function purchaseOffer(int $id, int $kwh): array
+    {
+        // 1) El historial captura una instantánea ANTES de la compra (Memento).
+        $this->history->snapshotBefore("Antes de comprar {$kwh} kWh en oferta #{$id}");
+
+        // 2) El mercado aplica la compra (con la política del Proxy).
+        $result = $this->market->purchaseOffer($id, $kwh);
+
+        // 3) El mediador coordina el registro según el resultado.
+        if ($result['success']) {
+            $this->logger->onPurchaseSucceeded($id, $kwh);
+            $this->record('offer.purchased', "Compra de {$kwh} kWh en oferta #{$id}");
+            $this->market->notifyMarketContext();
+        } else {
+            $this->logger->onPurchaseRejected($id, $kwh, $result['message'] ?? 'compra rechazada');
+            $this->record('offer.purchase.rejected', $result['message'] ?? 'compra rechazada');
+        }
+
+        return $result;
+    }
+}
+```
+
+**Colegas concretos** (`MarketServiceColleague.php`, `LoggerColleague.php`, `HistoryColleague.php`):
+
+```php
+// El historial pide la instantánea AL MEDIADOR, no al mercado directamente.
+class HistoryColleague implements Colleague
+{
+    public function snapshotBefore(string $reason): MarketMemento
+    {
+        $memento = $this->caretaker->push($this->mediator?->requestMemento($reason));
+        $this->mediator?->notify($this, 'memento.saved', ['reason' => $reason]);
+        return $memento;
+    }
+
+    public function undo(): ?MarketMemento
+    {
+        $memento = $this->caretaker->pop();
+        if ($memento === null) {
+            return null;
+        }
+        $this->mediator?->restoreMarket($memento, $memento->reason);
+        return $memento;
+    }
+}
+```
+
+**Uso integrado en `EnergyController`** — las compras y publicaciones pasan por el mediador:
+
+```php
+public function purchaseOffer(int $id, Request $request): JsonResponse
+{
+    $data = $request->validate(['kwh' => 'required|numeric|min:1']);
+
+    // Patron Mediator: el mediador coordina la compra completa:
+    // 1) captura una instantánea del mercado (Memento),
+    // 2) el Proxy protege y ejecuta la compra,
+    // 3) el Logger registra el resultado.
+    $result = $this->mediator->purchaseOffer($id, (int) round($data['kwh']));
+
+    return response()->json($result);
+}
+```
+
+**Ejemplo de estadísticas** (`GET /api/energy/mediator/stats`):
+
+```json
+{
+  "colleagues": [
+    "Mercado (MarketService)",
+    "Registro de actividad (LoggerService)",
+    "Historial del mercado (MarketCaretaker)"
+  ],
+  "eventsHandled": 3,
+  "recentEvents": [
+    { "event": "memento.saved", "detail": "Historial del mercado (MarketCaretaker)" },
+    { "event": "offer.purchased", "detail": "Compra de 2 kWh en oferta #2" },
+    { "event": "market.context", "detail": "Mercado (MarketService)" }
+  ],
+  "snapshots": 1
+}
+```
+
+---
+
+## 30. `PlatformMediator` — Frontend
+
+**Archivo:** `frontend/src/patterns/mediator/PlatformMediator.ts`
+
+**En qué consiste dentro del proyecto:** Mediador singleton de la interfaz. Los componentes se registran como colegas (`registerColleague`) y se comunican **solo a través de eventos**: el asistente de publicación (`CreateOffer`) publica `offer:created` tras publicar una oferta (custom o exprés) y la `App` se suscribe para refrescar el dashboard. Los demás paneles (`PredictionPanel`, `OfferPrototypePanel`, `PlatformPanel`, `PatternsPanel`, `BehavioralPatternsPanel`) también pasan por el mediador mediante el mismo evento. El mediador mantiene un **registro de eventos coordinados** visible en el panel: colegas locales, total de eventos y eventos recientes con su detalle y hora.
+
+**Diagrama UML:**
+
+```
+                    ┌───────────────────────────────────┐
+                    │   «Mediator (concreto)»           │
+                    │   PlatformMediator (Singleton)    │
+                    ├───────────────────────────────────┤
+                    │ - listeners : Record<string, fn[]>│
+                    │ - colleagues : PlatformColleague[]│
+                    │ - eventLog : MediatorEvent[]      │
+                    ├───────────────────────────────────┤
+                    │ + registerColleague(colleague)    │
+                    │ + subscribe(event, handler)       │
+                    │ + publish(event, detail, payload) │
+                    │ + getEventLog() / getStats()      │
+                    └───────▲──────────────▲────────────┘
+        publica "offer:created"│             │suscribe y refresca el dashboard
+┌───────────────────────────┐  │             │  ┌──────────────────────────┐
+│ CreateOffer («Colleague») │──┘             └──│ App («Colleague»)        │
+│ Publica tu energía        │                   │ setRefreshKey(...)       │
+└───────────────────────────┘                   └──────────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│ BehavioralPatternsPanel («Colleague»): suscrito a "offer:created",  │
+│ refresca las métricas de los tres patrones cuando alguien publica.  │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+**Código clave** (`PlatformMediator.ts`):
+
+```typescript
+class PlatformMediator {
+  private static instance: PlatformMediator;
+  private listeners: Record<string, Array<(payload: Record<string, unknown>) => void>> = {};
+  private colleagues: PlatformColleague[] = [];
+  private eventLog: MediatorEvent[] = [];
+
+  private constructor() {}
+
+  static getInstance(): PlatformMediator {
+    if (!PlatformMediator.instance) {
+      PlatformMediator.instance = new PlatformMediator();
+    }
+    return PlatformMediator.instance;
+  }
+
+  /** Un colega notifica un evento; el mediador lo reparte y lo registra. */
+  publish(event: PlatformEvent | string, detail = '', payload: Record<string, unknown> = {}): void {
+    this.eventLog.push({ event, detail, at: new Date().toLocaleTimeString() });
+    for (const handler of this.listeners[event] ?? []) {
+      handler(payload);
+    }
+  }
+}
+```
+
+**Uso ligado al sistema en `CreateOffer` y `App`:**
+
+```tsx
+// CreateOffer (colega): publica el evento en lugar de avisar por props.
+const mediator = PlatformMediator.getInstance();
+mediator.registerColleague({ name: 'Publicar oferta (CreateOffer)' });
+// ...tras publicar la oferta en el backend:
+mediator.publish('offer:created', `Oferta #${result.id} de ${offer.producerName}`);
+
+// App (colega): se suscribe y refresca el mercado sin conocer al emisor.
+const mediator = PlatformMediator.getInstance();
+mediator.registerColleague({ name: 'Aplicación (App)' });
+useEffect(() => {
+  const unsubscribe = mediator.subscribe('offer:created', () => {
+    setRefreshKey((prev) => prev + 1);
+  });
+  return unsubscribe;
+}, [mediator]);
+```
+
+---
+
+# Patrón Memento
+
+## ¿Qué es dentro del proyecto?
+
+El **Memento** se usa en el proyecto para **guardar instantáneas del estado y poder volver atrás**, en dos frentes:
+
+- **Mercado (backend):** antes de cada compra, el mediador captura una **instantánea completa del mercado** (ofertas con su energía disponible, contador de ids y contador de transacciones). El endpoint `POST /api/energy/market/undo` **deshace la última compra** restaurando esa instantánea, lo que cumple el objetivo de *actualizar automáticamente la cantidad de energía disponible después de una compra* — ahora también hacia atrás.
+- **Publicación de ofertas (frontend):** el asistente "Publica tu energía" captura una **instantánea del borrador** en cada avance de paso y expone los botones **Deshacer/Rehacer**, de modo que el productor no pierde los datos si se equivoca a mitad del wizard.
+
+**Implementaciones actuales (2):**
+
+- `MarketMemento` + `MarketCaretaker` — Backend (PHP)
+- `OfferDraftMemento` + `OfferDraftCaretaker` — Frontend (TypeScript)
+
+---
+
+## 31. `MarketMemento` / `MarketCaretaker` — Backend
+
+**Archivo:** `backend-laravel/app/Patterns/Mementos/` (`MarketMemento.php`, `MarketCaretaker.php`) y originator en `backend-laravel/app/Patterns/MarketService.php`
+
+**En qué consiste dentro del proyecto:** `MarketMemento` es la instantánea **inmutable** del mercado: guarda las ofertas serializadas (con `availableKwh` incluido), `nextId` y `transactionCount`, más el motivo y la fecha de la captura. No expone setters — solo el **originator** (`MarketService`, con `createMemento()` y `restoreFromMemento()`) puede leerla para restaurarse. `MarketCaretaker` es el **guardián**: mantiene una pila de máximo 10 instantáneas persistida en `storage/app/market_mementos.json` (sobrevive entre peticiones), la lista para el panel y la entrega al mediador para deshacer. El flujo completo es coordinado por el **Mediator**: compra → `snapshotBefore` → mercado → log; deshacer → `pop` → `restoreFromMemento` → invalidación de la caché del Proxy.
+
+**Diagrama UML:**
+
+```
+┌────────────────────────────────────────────────┐
+│            «Originator»                        │
+│            MarketService (Singleton)           │
+├────────────────────────────────────────────────┤
+│ - offers : EnergyOffer[]                       │
+│ - nextId : int                                 │
+│ - transactionCount : int                       │
+├────────────────────────────────────────────────┤
+│ + createMemento(reason) : MarketMemento        │
+│ + restoreFromMemento(memento) : void           │
+└───────────────────────┬────────────────────────┘
+                        │  crea / se restaura
+                        ▼
+┌────────────────────────────────────────────────┐
+│            «Memento (inmutable)»               │
+│               MarketMemento                    │
+├────────────────────────────────────────────────┤
+│ + offers : EnergyOffer[]   (readonly)          │
+│ + nextId : int             (readonly)          │
+│ + transactionCount : int   (readonly)          │
+│ + reason : string          (readonly)          │
+│ + createdAt : string       (readonly)          │
+├────────────────────────────────────────────────┤
+│ + capture(offers, nextId, count, reason)       │
+│ + fromArray(data)   (reconstrucción del JSON)  │
+│ + offers() : EnergyOffer[]                     │
+└───────────────────────▲────────────────────────┘
+                        │  guarda / recupera (sin inspeccionar)
+                        ▼
+┌────────────────────────────────────────────────┐
+│            «Caretaker (guardián)»              │
+│              MarketCaretaker                   │
+├────────────────────────────────────────────────┤
+│ - mementos : MarketMemento[]  (máx. 10)        │
+│ - dataFile : storage/app/market_mementos.json  │
+├────────────────────────────────────────────────┤
+│ + push(memento) : MarketMemento                │
+│ + pop() : ?MarketMemento                       │
+│ + history() : array   + count() : int          │
+└───────────────────────▲────────────────────────┘
+                        │  coordinado por el Mediator
+┌────────────────────────────────────────────────┐
+│ TransactionMediator → HistoryColleague         │
+│  compra: snapshotBefore()  ·  deshacer: undo() │
+└────────────────────────────────────────────────┘
+```
+
+**Código clave del memento** (`MarketMemento.php`):
+
+```php
+class MarketMemento
+{
+    private array $offers;
+
+    private function __construct(
+        array $offers,
+        public readonly int $nextId,
+        public readonly int $transactionCount,
+        public readonly string $reason,
+        public readonly string $createdAt,
+    ) {
+        $this->offers = $offers;   // sin setters: la instantánea es inmutable
+    }
+
+    public static function capture(array $offers, int $nextId, int $transactionCount, string $reason): self
+    {
+        return new self(
+            array_map(fn (EnergyOffer|array $o) => $o instanceof EnergyOffer ? $o->toArray() : $o, $offers),
+            $nextId,
+            $transactionCount,
+            $reason,
+            now()->toIso8601String(),
+        );
+    }
+}
+```
+
+**Originator en `MarketService.php`:**
+
+```php
+/** Captura una instantánea completa del mercado. */
+public function createMemento(string $reason): MarketMemento
+{
+    return MarketMemento::capture(
+        array_map(fn (EnergyOffer $o) => $o->toArray(), $this->offers),
+        $this->nextId,
+        $this->transactionCount,
+        $reason
+    );
+}
+
+/** Restaura el mercado a una instantánea anterior y persiste el cambio. */
+public function restoreFromMemento(MarketMemento $memento): void
+{
+    $this->offers = $memento->offers();
+    $this->nextId = $memento->nextId;
+    $this->transactionCount = $memento->transactionCount;
+    $this->save();
+}
+```
+
+**Caretaker** (`MarketCaretaker.php`) — pila persistida:
+
+```php
+public function push(MarketMemento $memento): MarketMemento
+{
+    $this->mementos[] = $memento;
+    if (count($this->mementos) > self::MAX_MEMENTOS) {
+        $this->mementos = array_slice($this->mementos, -self::MAX_MEMENTOS);
+    }
+    $this->persist();
+    return $memento;
+}
+
+public function pop(): ?MarketMemento
+{
+    if ($this->mementos === []) {
+        return null;
+    }
+    $memento = array_pop($this->mementos);
+    $this->persist();
+    return $memento;
+}
+```
+
+**Uso en `TransactionMediator`** — deshacer la última compra:
+
+```php
+public function undoLastPurchase(): array
+{
+    $memento = $this->history->undo();
+
+    if ($memento === null) {
+        $this->record('market.undo.empty', 'No hay instantáneas para restaurar');
+        return [
+            'success' => false,
+            'message' => 'No hay compras para deshacer: el historial de instantáneas está vacío.',
+        ];
+    }
+
+    $this->record('market.restored', "Mercado restaurado ({$memento->reason})");
+
+    return [
+        'success' => true,
+        'message' => 'Compra deshecha: el mercado volvió al estado anterior.',
+        'restoredTo' => [
+            'reason' => $memento->reason,
+            'createdAt' => $memento->createdAt,
+            'transactionCount' => $memento->transactionCount,
+        ],
+        'market' => $this->market->getMarketContext(),
+    ];
+}
+```
+
+**Ejemplo de respuesta** (`POST /api/energy/market/undo`):
+
+```json
+{
+  "success": true,
+  "message": "Compra deshecha: el mercado volvió al estado anterior.",
+  "restoredTo": {
+    "reason": "Antes de comprar 2 kWh en oferta #1",
+    "createdAt": "2026-11-14T15:11:18+00:00",
+    "transactionCount": 0
+  },
+  "market": { "totalOffers": 2, "activeOffers": 2, "totalAvailableKwh": 21, "avgPricePerKwh": 475, "transactionCount": 0 }
+}
+```
+
+---
+
+## 32. `OfferDraftMemento` / `OfferDraftCaretaker` — Frontend
+
+**Archivo:** `frontend/src/patterns/memento/` (`OfferDraftMemento.ts`, `OfferDraftCaretaker.ts`)
+
+**En qué consiste dentro del proyecto:** `OfferDraftMemento` es la instantánea **inmutable** del asistente de publicación: productor, fuente de energía, cantidad, precio, descripción y paso actual, con una etiqueta legible para el historial. `OfferDraftCaretaker` es el **guardián** con pila de deshacer/rehacer (máx. 20 instantáneas, instancia única exportada `offerDraftCaretaker`). El **originator** es `CreateOffer`: captura el borrador cada vez que el usuario avanza de paso (`goNextStep` → `caretaker.save(captureDraft())`) y los botones **↶ Deshacer / ↷ Rehacer** restauran la instantánea (campos + paso + fuente seleccionada), con un contador visible de borradores guardados.
+
+**Diagrama UML:**
+
+```
+┌────────────────────────────────────────────────┐
+│            «Originator»                        │
+│         CreateOffer (React, wizard)            │
+├────────────────────────────────────────────────┤
+│ state: producerName, energyType, totalKwh,     │
+│        pricePerKwh, description, step          │
+├────────────────────────────────────────────────┤
+│ + captureDraft() : OfferDraftMemento           │
+│ + restoreDraft(memento) : void                 │
+│ + goNextStep()   (captura ANTES de avanzar)    │
+└───────────────────────┬────────────────────────┘
+                        │  crea / se restaura
+                        ▼
+┌────────────────────────────────────────────────┐
+│            «Memento (inmutable)»               │
+│            OfferDraftMemento                   │
+├────────────────────────────────────────────────┤
+│ + producerName, energyType, totalKwh,          │
+│   pricePerKwh, description, step, createdAt    │
+│   (todos readonly)                             │
+├────────────────────────────────────────────────┤
+│ + capture(state) : OfferDraftMemento           │
+│ + label() : string  ("Paso 2 · Oscar · 15 kWh")│
+└───────────────────────▲────────────────────────┘
+                        │  guarda / deshace / rehace
+                        ▼
+┌────────────────────────────────────────────────┐
+│            «Caretaker (guardián)»              │
+│           OfferDraftCaretaker (singleton)      │
+├────────────────────────────────────────────────┤
+│ - undoStack / redoStack : OfferDraftMemento[]  │
+├────────────────────────────────────────────────┤
+│ + save(memento)   + undo() : ?Memento          │
+│ + redo() : ?Memento                            │
+│ + canUndo() / canRedo() / history()            │
+└───────────────────────▲────────────────────────┘
+                        │  botones de la interfaz
+┌────────────────────────────────────────────────┐
+│ CreateOffer: [↶ Deshacer] [↷ Rehacer]          │
+│ "⎘ Memento: N borrador(es) guardados"          │
+└────────────────────────────────────────────────┘
+```
+
+**Código clave del memento** (`OfferDraftMemento.ts`):
+
+```typescript
+export class OfferDraftMemento {
+  private constructor(
+    public readonly producerName: string,
+    public readonly energyType: string | null,
+    public readonly totalKwh: string,
+    public readonly pricePerKwh: string,
+    public readonly description: string,
+    public readonly step: number,
+    public readonly createdAt: string,
+  ) {}
+
+  static capture(state: { ... }): OfferDraftMemento {
+    return new OfferDraftMemento(
+      state.producerName, state.energyType, state.totalKwh,
+      state.pricePerKwh, state.description, state.step,
+      new Date().toLocaleTimeString(),
+    );
+  }
+
+  label(): string {
+    return `Paso ${this.step} · ${this.producerName.trim() || 'Sin productor'} · ${this.totalKwh || '—'} kWh`;
+  }
+}
+```
+
+**Uso ligado al sistema en `CreateOffer` (originator):**
+
+```tsx
+const caretaker = offerDraftCaretaker;   // guardián único de la sesión
+
+// Captura una instantánea del estado ACTUAL del asistente.
+const captureDraft = (): OfferDraftMemento =>
+  OfferDraftMemento.capture({
+    producerName, energyType: selectedEnergyType ?? null,
+    totalKwh, pricePerKwh, description, step,
+  });
+
+// Restaurar = volver exactamente al estado guardado (campos + paso).
+const restoreDraft = (memento: OfferDraftMemento | null) => {
+  if (!memento) return;
+  setProducerName(memento.producerName);
+  setTotalKwh(memento.totalKwh);
+  setPricePerKwh(memento.pricePerKwh);
+  setDescription(memento.description);
+  setStep(memento.step);
+  onSelectEnergyType?.(memento.energyType);
+};
+
+// Al avanzar de paso, se guarda la instantánea ANTES del cambio.
+const goNextStep = () => {
+  if (!stepValid[step]) return;
+  caretaker.save(captureDraft());
+  setStep((s) => s + 1);
+};
+
+// Botones de la interfaz:
+//   ↶ Deshacer  → restoreDraft(caretaker.undo())
+//   ↷ Rehacer   → restoreDraft(caretaker.redo())
+```
+
+---
+
+## Integración de Iterator, Mediator y Memento en la interfaz
+
+El componente **`BehavioralPatternsPanel`** es el cliente visual de los tres patrones (sección **"Patrones de comportamiento — 3er corte"**), junto con el asistente **"Publica tu energía"**:
+
+- **Iterator:** selector de estrategia (por tipo / más barata primero / solo disponibles) que ejecuta el recorrido en el frontend (TS) y consulta la misma estrategia en el backend (PHP), mostrando ofertas en el orden del recorrido y sus métricas.
+- **Mediator:** registro de eventos coordinados localmente (colegas, eventos, hora) y estadísticas del mediador del backend (colegas, eventos e instantáneas).
+- **Memento:** contador de borradores del asistente (deshacer/rehacer en el wizard) y botón **"Deshacer última compra"** que restaura la instantánea previa del mercado en el backend.
+
+**Archivo:** `frontend/src/components/BehavioralPatternsPanel.tsx`
+
+```tsx
+const api = EnergyApiService.getInstance();
+const mediator = PlatformMediator.getInstance();
+
+// Iterator: recorrido local (TS) + misma estrategia en el backend (PHP)
+const collection = new OfferCollection(offers);
+const iterator = collection.createIterator(strategy, { energyType });
+while (iterator.hasNext()) { walked.push(iterator.next()); }
+setBackendIterated(await api.getIteratedOffers(strategy, energyType));
+
+// Mediator: el panel es un colega suscrito a "offer:created"
+const unsubscribe = mediator.subscribe('offer:created', () => loadMediatorAndHistory());
+
+// Memento: deshacer la última compra (restaura la instantánea previa)
+const result = await api.undoLastPurchase();
+mediator.publish('system:refresh', 'Compra deshecha en el backend (Memento)');
+```
+
+**Endpoints que alimentan el panel:**
+
+| Método | Ruta | Patrón | Qué devuelve |
+|--------|------|--------|--------------|
+| GET | `/api/energy/offers/iterate` | Iterator | Ofertas en el orden del recorrido + métricas (estrategia, walked, kWh, precio promedio) |
+| GET | `/api/energy/mediator/stats` | Mediator | Colegas registrados, eventos coordinados e instantáneas |
+| GET | `/api/energy/market/history` | Memento | Historial de instantáneas del mercado (motivo, fecha, contadores) |
+| POST | `/api/energy/market/undo` | Memento + Mediator | Restaura el mercado a la última instantánea (deshacer compra) |
+
+**Demostración rápida:**
+
+1. Abrir el panel **Iterator · Mediator · Memento** en la interfaz.
+2. En **Iterator**, elegir la estrategia "Por precio" y pulsar **Recorrer**: las ofertas aparecen de la más barata a la más cara; probar "Por tipo de energía" con solar/eólica/hidráulica.
+3. En **Memento**, comprar energía desde el dashboard y luego pulsar **Deshacer última compra**: la oferta recupera su energía disponible (la instantánea previa se restaura) y el mensaje lo confirma.
+4. En el asistente **"Publica tu energía"**, avanzar 2 pasos y pulsar **↶ Deshacer**: el borrador vuelve al estado anterior; **↷ Rehacer** lo restaura.
+5. Publicar una oferta desde el wizard: el evento `offer:created` pasa por el **Mediator** y el dashboard se refresca; el panel muestra el evento en su registro.
+
+---
+
 # Guía de Ejecución
 
 ## Backend (Laravel)
@@ -5424,6 +6322,10 @@ El frontend corre en `http://localhost:5173`.
 | GET | `/api/energy/platform/iot-status` | Estado de la red IoT: resumen + inventario normalizado (Facade) |
 | GET | `/api/energy/flyweight-stats` | Estadísticas del pool Flyweight (PHP): instancias creadas vs usos |
 | GET | `/api/energy/proxy-stats` | Estadísticas del Proxy (PHP): caché válida, TTL, entradas y política de compras |
+| GET | `/api/energy/offers/iterate` | Recorrer el mercado con el patrón Iterator. Estrategias: `?strategy=available\|cheapest\|type&energyType=solar` |
+| GET | `/api/energy/mediator/stats` | Estadísticas del Mediator (PHP): colegas, eventos coordinados e instantáneas |
+| GET | `/api/energy/market/history` | Historial de instantáneas del mercado (Memento — `MarketCaretaker`) |
+| POST | `/api/energy/market/undo` | Deshacer la última compra restaurando la instantánea previa (Memento + Mediator) |
 
 ## Ejemplo de Request
 
@@ -5549,6 +6451,24 @@ curl http://localhost:8000/api/energy/flyweight-stats
 
 # Estadisticas de Proxy (cache + proteccion de compras)
 curl http://localhost:8000/api/energy/proxy-stats
+
+# Recorrer el mercado con el Iterator (estrategias: available, cheapest, type)
+curl "http://localhost:8000/api/energy/offers/iterate?strategy=cheapest"
+curl "http://localhost:8000/api/energy/offers/iterate?strategy=type&energyType=solar"
+
+# Estadisticas del Mediator (colegas + eventos coordinados)
+curl http://localhost:8000/api/energy/mediator/stats
+
+# Comprar energia (el Mediator captura una instantanea antes de aplicar la compra)
+curl -X POST http://localhost:8000/api/energy/offers/1/purchase \
+  -H "Content-Type: application/json" \
+  -d '{"kwh": 3}'
+
+# Historial de instantaneas del mercado (Memento)
+curl http://localhost:8000/api/energy/market/history
+
+# Deshacer la ultima compra (restaura la instantanea previa)
+curl -X POST http://localhost:8000/api/energy/market/undo
 ```
 
 ## Patrones de diseño implementados
@@ -5569,5 +6489,8 @@ Hasta el momento se han implementado y documentado en este README los siguientes
 | 10 | **Facade** | `EnergyPlatformFacade` (PHP) + `PlatformFacade` (TS) delegando en `EnergyApiService` |
 | 11 | **Flyweight** | `EnergySourceFlyweightFactory` (PHP) + `EnergyTypeFlyweightFactory` (TS) |
 | 12 | **Proxy** | `MarketProxy` (PHP: virtual, caché, protección) + `EnergyApiProxy` (TS: caché TTL + protección) |
+| 13 | **Iterator** | `OfferCollection` + `OfferIterator` con `AvailableOfferIterator` / `CheapestOfferIterator` / `EnergyTypeOfferIterator` (PHP y TS) |
+| 14 | **Mediator** | `TransactionMediator` + `MarketServiceColleague` / `LoggerColleague` / `HistoryColleague` (PHP) + `PlatformMediator` (TS) |
+| 15 | **Memento** | `MarketMemento` + `MarketCaretaker` (PHP) + `OfferDraftMemento` + `OfferDraftCaretaker` (TS) |
 
 *Próximamente se implementará el siguiente patrón de diseño...*

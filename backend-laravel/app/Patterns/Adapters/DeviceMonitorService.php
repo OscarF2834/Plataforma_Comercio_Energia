@@ -40,6 +40,12 @@ class DeviceMonitorService
         return $this->gateway($deviceId)->readTelemetry();
     }
 
+    /** Telemetría de TODA la red IoT (elementos para el patron Visitor). */
+    public function allTelemetry(): array
+    {
+        return array_map(fn (DeviceGateway $gateway) => $gateway->readTelemetry(), $this->gateways);
+    }
+
     /** Resumen consolidado de la red domestica (el cliente no sabe de marcas). */
     public function getSummary(): array
     {

@@ -13,9 +13,19 @@ use App\Patterns\Bridges\SettlementService;
 use App\Patterns\Factories\EnergySourceFactory;
 use App\Patterns\Factories\PredictorFactory;
 use App\Patterns\Flyweights\EnergySourceFlyweightFactory;
+use App\Patterns\Iterators\OfferCollection;
+use App\Patterns\Mediators\HistoryColleague;
+use App\Patterns\Mediators\LoggerColleague;
+use App\Patterns\Mediators\MarketServiceColleague;
+use App\Patterns\Mediators\TransactionMediator;
+use App\Patterns\Mementos\MarketCaretaker;
+use App\Patterns\Observers\MetricsSnapshotObserver;
 use App\Patterns\Proxies\MarketProxy;
 use App\Patterns\Predictors\AbstractPredictor;
 use App\Patterns\Prototypes\PrototypeRegistry;
+use App\Patterns\States\OfferStateContext;
+use App\Patterns\Visitors\MarketAuditVisitor;
+use App\Patterns\Visitors\MarketReportVisitor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -33,6 +43,8 @@ class EnergyController extends Controller
     private OfferPricingService $pricing;
     private BundleService $bundles;
     private EnergyPlatformFacade $platform;
+    private TransactionMediator $mediator;
+    private MarketCaretaker $caretaker;
 
     public function __construct()
     {
@@ -66,6 +78,18 @@ class EnergyController extends Controller
 
         // Patron Facade: interfaz unificada a TODOS los subsistemas.
         $this->platform = new EnergyPlatformFacade();
+
+        // Patron Mediator: el mediador coordina Mercado + Registro de
+        // actividad + Historial de instantáneas (Memento) en cada
+        // publicación y compra. Los colegas ya no se conocen entre sí.
+        $this->mediator = new TransactionMediator(
+            new MarketServiceColleague(MarketProxy::getInstance()),
+            new LoggerColleague(LoggerService::getInstance()),
+            new HistoryColleague(new MarketCaretaker()),
+        );
+
+        // Patron Memento: guardian de las instantáneas del mercado.
+        $this->caretaker = new MarketCaretaker();
     }
 
     public function createOffer(Request $request): JsonResponse
@@ -79,13 +103,12 @@ class EnergyController extends Controller
         ]);
 
         try {
-            $offer = $this->marketProxy->registerOffer($data);
+            // Patron Mediator: el mediador coordina mercado + registro de
+            // actividad (el controlador ya no orquesta a mano).
+            $offer = $this->mediator->publishOffer($data);
         } catch (\InvalidArgumentException $e) {
             return response()->json(['error' => $e->getMessage()], 422);
         }
-
-        $this->logger->incrementOffers();
-        $this->logger->log("Oferta creada por {$data['producerName']} ({$offer->energyType})");
 
         return response()->json($offer->toArray(), 201);
     }
@@ -138,14 +161,11 @@ class EnergyController extends Controller
     {
         $data = $request->validate(['kwh' => 'required|numeric|min:1']);
 
-        // Patron Proxy: el proxy protege la compra (mínimo/máximo) y,
-        // si es exitosa, invalida la caché de ofertas.
-        $result = $this->marketProxy->purchaseOffer($id, (int) round($data['kwh']));
-
-        if ($result['success']) {
-            $this->logger->incrementTransactions();
-            $this->logger->log("Compra de {$data['kwh']} KWh en oferta #{$id}");
-        }
+        // Patron Mediator: el mediador coordina la compra completa:
+        // 1) captura una instantánea del mercado (Memento),
+        // 2) el Proxy protege y ejecuta la compra,
+        // 3) el Logger registra el resultado.
+        $result = $this->mediator->purchaseOffer($id, (int) round($data['kwh']));
 
         return response()->json($result);
     }
@@ -447,5 +467,187 @@ class EnergyController extends Controller
     {
         // Patron Facade: inventario + resumen de la red IoT.
         return response()->json($this->platform->getIoTNetworkStatus());
+    }
+
+    // ------------------------------------------------------------------
+    // Patron Iterator: recorrer el mercado con distintas estrategias sin
+    // exponer el arreglo interno de ofertas.
+    // ------------------------------------------------------------------
+
+    public function iterateOffers(Request $request): JsonResponse
+    {
+        $strategy = (string) $request->query('strategy', 'available');
+        $energyType = strtolower((string) $request->query('energyType', ''));
+
+        try {
+            // La colección agregada crea el iterador concreto según la estrategia.
+            $iterator = $this->marketProxy
+                ->getOfferCollection()
+                ->createIterator($strategy, ['energyType' => $energyType]);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
+
+        // Recorrido con la interfaz hasNext()/next(): el cliente nunca
+        // toca el arreglo de ofertas del mercado.
+        $offers = [];
+        $walked = 0;
+        while ($iterator->hasNext()) {
+            $offer = $iterator->next();
+            $walked++;
+            if ($offer !== null) {
+                $offers[] = $offer->toArray();
+            }
+        }
+
+        $totalKwh = round(array_sum(array_map(fn ($o) => $o['availableKwh'], $offers)), 2);
+        $avgPrice = $offers !== []
+            ? round(array_sum(array_map(fn ($o) => $o['pricePerKwh'], $offers)) / count($offers), 2)
+            : 0.0;
+
+        $this->logger->log("Consulta del mercado con el patron Iterator (estrategia: {$strategy})");
+
+        return response()->json([
+            'strategy' => $strategy,
+            'filters' => $strategy === 'type' ? ['energyType' => $energyType] : [],
+            'total' => count($offers),
+            'walked' => $walked,
+            'totalAvailableKwh' => $totalKwh,
+            'avgPricePerKwh' => $avgPrice,
+            'offers' => $offers,
+        ]);
+    }
+
+    // ------------------------------------------------------------------
+    // Patron Mediator: estadísticas del mediador de transacciones.
+    // ------------------------------------------------------------------
+
+    public function getMediatorStats(): JsonResponse
+    {
+        $this->logger->log('Consulta de estadísticas del Mediator (coordinación compra/venta)');
+        return response()->json($this->mediator->getStats());
+    }
+
+    // ------------------------------------------------------------------
+    // Patron Memento: historial de instantáneas del mercado y deshacer
+    // la última compra (el mediador restaura el estado anterior).
+    // ------------------------------------------------------------------
+
+    public function getMarketHistory(): JsonResponse
+    {
+        return response()->json([
+            'snapshots' => $this->mediator->getMarketHistory(),
+            'count' => $this->caretaker->count(),
+        ]);
+    }
+
+    public function undoLastPurchase(): JsonResponse
+    {
+        $result = $this->mediator->undoLastPurchase();
+        return response()->json($result, $result['success'] ? 200 : 404);
+    }
+
+    // ------------------------------------------------------------------
+    // Patron Observer: estadísticas de los observadores del mercado.
+    // ------------------------------------------------------------------
+
+    public function getObserverStats(): JsonResponse
+    {
+        $subject = $this->marketProxy->getMarketSubject();
+
+        $this->logger->log('Consulta de estadísticas del Observer (observadores del mercado)');
+        return response()->json([
+            'observers' => $subject->observerNames(),
+            'eventsHandled' => $subject->countEvents(),
+            'recentEvents' => array_slice($subject->getEventLog(), -5),
+            'metrics' => (new MetricsSnapshotObserver())->getStats(),
+        ]);
+    }
+
+    // ------------------------------------------------------------------
+    // Patron State: ciclo de vida de las ofertas del mercado.
+    // ------------------------------------------------------------------
+
+    public function getOfferStates(): JsonResponse
+    {
+        $states = [];
+        $summary = [];
+
+        // El Iterator provee todas las ofertas; se resuelve el estado de cada una.
+        foreach ($this->marketOffers() as $offer) {
+            $state = OfferStateContext::resolve($offer);
+            $states[] = [
+                'id' => $offer->id,
+                'producerName' => $offer->producerName,
+                'energyType' => $offer->energyType,
+                'totalKwh' => $offer->totalKwh,
+                'availableKwh' => $offer->availableKwh,
+                'state' => [
+                    'name' => $state->name(),
+                    'label' => $state->label(),
+                    'color' => $state->color(),
+                    'canPurchase' => $state->canPurchase(),
+                ],
+            ];
+            $summary[$state->label()] = ($summary[$state->label()] ?? 0) + 1;
+        }
+
+        $this->logger->log('Consulta de estados del ciclo de vida de las ofertas (State)');
+        return response()->json([
+            'states' => $states,
+            'summary' => $summary,
+        ]);
+    }
+
+    /** Todas las ofertas del mercado (incluidas las agotadas). */
+    private function marketOffers(): array
+    {
+        // Se accede al subject real vía el proxy: la colección envuelve todas.
+        $collection = $this->marketProxy->getOfferCollection();
+        $iterator = $collection->createIterator('cheapest');
+        $offers = [];
+        while ($iterator->hasNext()) {
+            $offer = $iterator->next();
+            if ($offer !== null) {
+                $offers[] = $offer;
+            }
+        }
+        return $offers;
+    }
+
+    // ------------------------------------------------------------------
+    // Patron Visitor: reporte y auditoría del inventario del mercado.
+    // ------------------------------------------------------------------
+
+    public function getVisitorReport(Request $request): JsonResponse
+    {
+        $type = (string) $request->query('type', 'report');
+
+        // Visitante concreto elegido por parámetro: mismo recorrido,
+        // operación distinta.
+        $visitor = match ($type) {
+            'audit' => new MarketAuditVisitor(),
+            'report' => new MarketReportVisitor(),
+            default => null,
+        };
+
+        if ($visitor === null) {
+            return response()->json(['error' => "Tipo de visitante no soportado: {$type}"], 422);
+        }
+
+        // Elementos del inventario: ofertas (todas), fuentes de energía
+        // y telemetría de la red IoT. Cada uno se acepta con doble despacho.
+        foreach ($this->marketOffers() as $offer) {
+            $offer->accept($visitor);
+        }
+        foreach ($this->sourceFactory->createAll() as $source) {
+            $source->accept($visitor);
+        }
+        foreach ($this->devices->allTelemetry() as $telemetry) {
+            $telemetry->accept($visitor);
+        }
+
+        $this->logger->log("Consulta del inventario con el patron Visitor (visitante: {$type})");
+        return response()->json($visitor->result());
     }
 }

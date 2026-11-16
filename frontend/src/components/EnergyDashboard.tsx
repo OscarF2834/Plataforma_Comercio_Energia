@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import energyTypeFlyweightFactory from '../patterns/flyweight/EnergyTypeFlyweightFactory';
 import energyApiProxy from '../patterns/proxy/EnergyApiProxy';
+import OfferStateContext from '../patterns/state/OfferStateContext';
+import marketEventsSubject from '../patterns/observer/MarketEventsSubject';
+import DashboardRefreshObserver from '../patterns/observer/DashboardRefreshObserver';
 
 interface EnergyOffer {
   id?: number;
@@ -36,15 +39,35 @@ export default function EnergyDashboard() {
 
   useEffect(() => {
     fetchOffers();
+
+    // Patron Observer: el dashboard se suscribe al sujeto del mercado.
+    // Cuando alguien publique o compre energía, el DashboardRefreshObserver
+    // notifica el cambio y refresca la lista automáticamente.
+    const refreshObserver = new DashboardRefreshObserver(fetchOffers);
+    marketEventsSubject.attach(refreshObserver);
+    return () => marketEventsSubject.detach(refreshObserver);
   }, []);
 
   const handlePurchase = async (id: number) => {
+    const offer = offers.find((o) => o.id === id);
+    // Patron State: el estado actual decide si la compra es posible.
+    if (offer && !OfferStateContext.resolve(offer).canPurchase()) {
+      alert('Esta oferta está agotada: no queda energía disponible para comprar');
+      return;
+    }
     const kwh = prompt('Ingrese la cantidad de kWh a comprar:');
     if (!kwh) return;
     try {
       const result = await api.purchaseOffer(id, parseFloat(kwh));
       alert(result.message);
-      await fetchOffers();
+
+      // Patron Observer: la compra es un cambio de estado del mercado.
+      // Se notifica al sujeto y los observadores reaccionan (el feed
+      // registra el evento y el dashboard se refresca solo).
+      const purchased = offers.find((o) => o.id === id);
+      if (purchased) {
+        marketEventsSubject.notifyOfferPurchased(purchased, `Compra de ${parseFloat(kwh)} kWh en la oferta #${id}`);
+      }
     } catch (error) {
       console.error('Error:', error);
       setError('No se pudo completar la compra. Revisa la cantidad e inténtalo de nuevo.');
@@ -59,7 +82,10 @@ export default function EnergyDashboard() {
     try {
       const clone = await api.cloneOffer(offer.id!);
       alert(`Oferta #${clone.id} creada como clon de la #${offer.id}.`);
-      await fetchOffers();
+
+      // Patron Observer: registrar una oferta también es un cambio del
+      // mercado; los observadores lo registran y refrescan el dashboard.
+      marketEventsSubject.notifyOfferPublished(clone, `Oferta #${clone.id} clonada desde la #${offer.id}`);
     } catch (error) {
       console.error('Error:', error);
       setError('No se pudo duplicar la oferta. Inténtalo de nuevo.');
@@ -105,7 +131,11 @@ export default function EnergyDashboard() {
         </div>
       ) : (
         <div style={styles.grid}>
-          {offers.map((offer) => (
+          {offers.map((offer) => {
+            // Patron State: el estado del ciclo de vida de la oferta
+            // decide la insignia y si se puede comprar.
+            const state = OfferStateContext.resolve(offer);
+            return (
             <div key={offer.id} style={styles.offerCard}>
               <img
                 className="offer-image"
@@ -117,6 +147,17 @@ export default function EnergyDashboard() {
               />
               <div className="offer-card-content">
               {offer.energyType && <span className="offer-type">{energyTypeFlyweightFactory.getName(offer.energyType)}</span>}
+              <span
+                style={{
+                  ...styles.stateBadge,
+                  color: state.color,
+                  borderColor: state.color,
+                  backgroundColor: `${state.color}1a`,
+                }}
+                title={`Estado de la oferta (patrón State): ${state.label}`}
+              >
+                {state.label}
+              </span>
               <h3 style={styles.offerTitle}>{offer.producerName}</h3>
               <p style={styles.offerDetail}>
                 <strong>{offer.availableKwh}</strong> kWh disponibles
@@ -127,9 +168,15 @@ export default function EnergyDashboard() {
               )}
               <button
                 onClick={() => handlePurchase(offer.id!)}
-                style={styles.buyButton}
+                disabled={!state.canPurchase()}
+                style={{
+                  ...styles.buyButton,
+                  ...(state.canPurchase()
+                    ? {}
+                    : { backgroundColor: '#b0b8c1', cursor: 'not-allowed' }),
+                }}
               >
-                Comprar energía
+                {state.canPurchase() ? 'Comprar energía' : 'Agotada'}
               </button>
               <button
                 onClick={() => handleClone(offer)}
@@ -139,7 +186,8 @@ export default function EnergyDashboard() {
               </button>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -172,6 +220,16 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '8px',
     padding: '16px',
     backgroundColor: '#f9f9f9',
+  },
+  stateBadge: {
+    display: 'inline-block',
+    marginLeft: '6px',
+    padding: '2px 10px',
+    borderRadius: '999px',
+    border: '1px solid',
+    fontSize: '0.75rem',
+    fontWeight: 'bold',
+    verticalAlign: 'middle',
   },
   offerTitle: {
     margin: '0 0 8px 0',

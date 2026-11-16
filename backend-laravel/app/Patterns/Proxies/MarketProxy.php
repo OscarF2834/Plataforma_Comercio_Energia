@@ -4,8 +4,11 @@ namespace App\Patterns\Proxies;
 
 use App\Models\EnergyOffer;
 use App\Patterns\ConfigService;
+use App\Patterns\Iterators\OfferCollection;
 use App\Patterns\LoggerService;
 use App\Patterns\MarketService;
+use App\Patterns\Mementos\MarketMemento;
+use App\Patterns\Observers\MarketSubject;
 
 /**
  * Patron Proxy.
@@ -117,6 +120,7 @@ class MarketProxy
                 $e->description = $offer['description'];
                 $e->energyType = $offer['energyType'];
                 $e->createdAt = $offer['createdAt'];
+                $e->state = $offer['state'] ?? null;
                 return $e;
             }, $this->cache['offers']);
         }
@@ -127,7 +131,6 @@ class MarketProxy
 
         return $offers;
     }
-
     // ------------------------------------------------------------------
     // Proxy de protección: toda compra pasa primero por la política.
     // ------------------------------------------------------------------
@@ -220,5 +223,37 @@ class MarketProxy
             'entries' => $this->isCacheValid() ? count($this->cache['offers']) : 0,
             'expiresIn' => $this->isCacheValid() ? max(0, (int) $this->cache['expiresAt'] - time()) : 0,
         ];
+    }
+
+    // ------------------------------------------------------------------
+    // Patron Iterator: delega la colección agregada del sujeto real para
+    // que el cliente recorra el mercado con iteradores por estrategia.
+    // ------------------------------------------------------------------
+
+    public function getOfferCollection(): OfferCollection
+    {
+        return $this->real()->getOfferCollection();
+    }
+
+    /** Patron Observer: sujeto que notifica los cambios del mercado real. */
+    public function getMarketSubject(): MarketSubject
+    {
+        return $this->real()->getMarketSubject();
+    }
+
+    // ------------------------------------------------------------------
+    // Patron Memento: instantáneas del sujeto real. Restaurar cambia el
+    // mercado, así que también invalida la caché del Proxy.
+    // ------------------------------------------------------------------
+
+    public function createMemento(string $reason): MarketMemento
+    {
+        return $this->real()->createMemento($reason);
+    }
+
+    public function restoreFromMemento(MarketMemento $memento): void
+    {
+        $this->real()->restoreFromMemento($memento);
+        $this->invalidateCache();
     }
 }

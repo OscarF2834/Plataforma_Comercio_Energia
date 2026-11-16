@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import CreateOffer from './components/CreateOffer';
 import EnergyDashboard from './components/EnergyDashboard';
 import PredictionPanel from './components/PredictionPanel';
@@ -9,6 +9,10 @@ import OfferExtrasPanel from './components/OfferExtrasPanel';
 import BundlePanel from './components/BundlePanel';
 import PatternsPanel from './components/PatternsPanel';
 import PlatformPanel from './components/PlatformPanel';
+import BehavioralPatternsPanel from './components/BehavioralPatternsPanel';
+import PlatformMediator from './patterns/mediator/PlatformMediator';
+import marketEventsSubject from './patterns/observer/MarketEventsSubject';
+import activityFeedObserver from './patterns/observer/ActivityFeedObserver';
 
 const heroPhotos = [
   {
@@ -33,8 +37,31 @@ function App() {
   const [selectedEnergyType, setSelectedEnergyType] = useState<string | null>(null);
   const [heroPhoto] = useState(() => heroPhotos[Math.floor(Math.random() * heroPhotos.length)]);
 
+  // Patron Mediator: la App es un colega más de la plataforma. Se
+  // suscribe a los eventos que publican los demás componentes (por
+  // ejemplo "offer:created" desde el asistente de publicación) y
+  // refresca el dashboard, sin acoplarse a ellos.
+  const mediator = PlatformMediator.getInstance();
+  mediator.registerColleague({ name: 'Aplicación (App)' });
+
+  useEffect(() => {
+    const unsubscribe = mediator.subscribe('offer:created', () => {
+      setRefreshKey((prev) => prev + 1);
+    });
+    return unsubscribe;
+  }, [mediator]);
+
+  // Patron Observer: la App adjunta el observador del feed de actividad
+  // al sujeto del mercado para que registre TODOS los cambios (publicar,
+  // clonar, comprar) aunque el panel de patrones no esté abierto.
+  useEffect(() => {
+    marketEventsSubject.attach(activityFeedObserver);
+  }, []);
+
+  // Los paneles también pasan por el mediador en lugar de acoplarse
+  // directamente a la App.
   const handleOfferCreated = () => {
-    setRefreshKey((prev) => prev + 1);
+    mediator.publish('offer:created', 'Refresco solicitado por un panel');
   };
 
   return (
@@ -93,6 +120,7 @@ function App() {
           <a href="#extras">Opciones de oferta</a>
           <a href="#paquetes">Paquetes de energía</a>
           <a href="#patrones">Flyweight y Proxy</a>
+          <a href="#comportamiento">Iterator · Mediator · Memento</a>
         </nav>
 
         <section className="content-section market-section" id="market" aria-label="Publicación y ofertas de energía">
@@ -137,6 +165,9 @@ function App() {
         </section>
         <section className="content-section panel-section" id="patrones">
           <PatternsPanel onSystemChanged={handleOfferCreated} />
+        </section>
+        <section className="content-section panel-section" id="comportamiento">
+          <BehavioralPatternsPanel onSystemChanged={handleOfferCreated} />
         </section>
       </main>
       <footer className="site-footer">

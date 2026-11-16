@@ -2,6 +2,8 @@
 
 namespace App\Patterns\EnergySources;
 
+use App\Patterns\Visitors\MarketElementVisitor;
+
 abstract class EnergySource
 {
     abstract public function getType(): string;
@@ -23,5 +25,14 @@ abstract class EnergySource
             'efficiency' => $this->getEfficiency(),
             'color' => $this->getColor(),
         ];
+    }
+
+    /**
+     * Patron Visitor — acepta un visitante (doble despacho): la fuente
+     * concreta delega en el método visit que le corresponde por clase.
+     */
+    public function accept(MarketElementVisitor $visitor): void
+    {
+        $visitor->visitSource($this);
     }
 }

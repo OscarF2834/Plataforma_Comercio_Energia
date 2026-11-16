@@ -5,8 +5,16 @@ namespace App\Patterns;
 use App\Models\EnergyOffer;
 use App\Patterns\Builders\EnergyOfferBuilder;
 use App\Patterns\Builders\OfferDirector;
+use App\Patterns\Iterators\OfferCollection;
+use App\Patterns\Mementos\MarketMemento;
 use App\Patterns\Prototypes\OfferPrototype;
 use App\Patterns\Prototypes\PrototypeRegistry;
+use App\Patterns\Observers\LowStockAlertObserver;
+use App\Patterns\Observers\MarketSubject;
+use App\Patterns\Observers\MetricsSnapshotObserver;
+use App\Patterns\Observers\PriceWatchObserver;
+use App\Patterns\States\OfferStateContext;
+use App\Patterns\LoggerService;
 
 class MarketService
 {
@@ -18,10 +26,25 @@ class MarketService
 
     private string $dataFile;
 
+    /** Patron Observer: sujeto que notifica los cambios del mercado. */
+    private MarketSubject $subject;
+
     private function __construct()
     {
         $this->dataFile = storage_path('app/market_data.json');
         $this->load();
+
+        // Patron Observer: el mercado adjunta sus observadores. Cada uno
+        // reacciona distinto a los mismos eventos (métricas, alertas, precios).
+        $this->subject = new MarketSubject();
+        $this->subject->attach(new MetricsSnapshotObserver());
+        $this->subject->attach(new LowStockAlertObserver(LoggerService::getInstance()));
+        $this->subject->attach(new PriceWatchObserver(LoggerService::getInstance()));
+    }
+
+    public function getMarketSubject(): MarketSubject
+    {
+        return $this->subject;
     }
 
     public static function getInstance(): self
@@ -49,6 +72,9 @@ class MarketService
                 $offer->description = $o['description'] ?? '';
                 $offer->energyType = $o['energyType'] ?? '';
                 $offer->createdAt = $o['createdAt'] ?? '';
+                // Patron State: estado persistido, o derivado del stock si
+                // el JSON es anterior a la incorporación del patrón.
+                $offer->state = $o['state'] ?? OfferStateContext::deriveName($o['availableKwh'], $o['totalKwh']);
                 $this->offers[] = $offer;
             }
         }
@@ -77,6 +103,10 @@ class MarketService
 
         $this->offers[] = $offer;
         $this->save();
+
+        // Patron Observer: notifica a los observadores del mercado.
+        $this->subject->notifyOfferRegistered($offer);
+
         return $offer;
     }
 
@@ -93,6 +123,10 @@ class MarketService
 
         $this->offers[] = $offer;
         $this->save();
+
+        // Patron Observer: notifica a los observadores del mercado.
+        $this->subject->notifyOfferRegistered($offer);
+
         return $offer;
     }
 
@@ -132,6 +166,10 @@ class MarketService
 
         $this->offers[] = $offer;
         $this->save();
+
+        // Patron Observer: notifica a los observadores del mercado.
+        $this->subject->notifyOfferRegistered($offer);
+
         return $offer;
     }
 
@@ -158,7 +196,47 @@ class MarketService
 
         $this->offers[] = $offer;
         $this->save();
+
+        // Patron Observer: notifica a los observadores del mercado.
+        $this->subject->notifyOfferRegistered($offer);
+
         return $offer;
+    }
+
+    // ------------------------------------------------------------------
+    // Patron Iterator: la coleccion agregada envuelve TODAS las ofertas
+    // (incluidas las agotadas) y crea iteradores por estrategia. El
+    // cliente nunca accede al arreglo interno.
+    // ------------------------------------------------------------------
+
+    public function getOfferCollection(): OfferCollection
+    {
+        return new OfferCollection($this->offers);
+    }
+
+    // ------------------------------------------------------------------
+    // Patron Memento: el MarketService es el ORIGINATOR. Solo el mercado
+    // sabe capturar y restaurar su estado completo (ofertas + contadores).
+    // ------------------------------------------------------------------
+
+    /** Captura una instantánea completa del mercado. */
+    public function createMemento(string $reason): MarketMemento
+    {
+        return MarketMemento::capture(
+            array_map(fn (EnergyOffer $o) => $o->toArray(), $this->offers),
+            $this->nextId,
+            $this->transactionCount,
+            $reason
+        );
+    }
+
+    /** Restaura el mercado a una instantánea anterior y persiste el cambio. */
+    public function restoreFromMemento(MarketMemento $memento): void
+    {
+        $this->offers = $memento->offers();
+        $this->nextId = $memento->nextId;
+        $this->transactionCount = $memento->transactionCount;
+        $this->save();
     }
 
     public function getOfferById(int $id): ?EnergyOffer
@@ -180,13 +258,20 @@ class MarketService
     {
         foreach ($this->offers as $offer) {
             if ($offer->id === $id) {
-                if ($offer->availableKwh < $kwh) {
-                    return ['success' => false, 'message' => 'KWh insuficientes disponibles'];
+                // Patron State: el comportamiento de la compra depende del
+                // estado de la oferta (disponible / parcialmente vendida /
+                // agotada) y el estado transiciona automáticamente.
+                $result = OfferStateContext::handlePurchase($offer, $kwh);
+
+                if ($result['success']) {
+                    $this->transactionCount++;
+                    $this->save();
+
+                    // Patron Observer: notifica la compra a los observadores
+                    // (estado actual incluido, para alertas y precios).
+                    $this->subject->notifyOfferPurchased($offer, $kwh, $result);
                 }
-                $offer->availableKwh -= $kwh;
-                $this->transactionCount++;
-                $this->save();
-                return ['success' => true, 'message' => "Compra exitosa de {$kwh} KWh"];
+                return $result;
             }
         }
         return ['success' => false, 'message' => 'Oferta no encontrada'];

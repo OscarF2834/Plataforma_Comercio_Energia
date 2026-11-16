@@ -46,4 +46,23 @@ Route::prefix('energy')->group(function () {
     Route::post('/platform/buy', [EnergyController::class, 'buyEnergy']);
     Route::get('/platform/advice', [EnergyController::class, 'getSurplusAdvice']);
     Route::get('/platform/iot-status', [EnergyController::class, 'getIoTNetworkStatus']);
+
+    // Patron Iterator: recorrer el mercado por estrategia (type/cheapest/available).
+    Route::get('/offers/iterate', [EnergyController::class, 'iterateOffers']);
+
+    // Patron Mediator: estadisticas de la coordinacion compra/venta.
+    Route::get('/mediator/stats', [EnergyController::class, 'getMediatorStats']);
+
+    // Patron Memento: historial de instantaneas del mercado y deshacer compra.
+    Route::get('/market/history', [EnergyController::class, 'getMarketHistory']);
+    Route::post('/market/undo', [EnergyController::class, 'undoLastPurchase']);
+
+    // Patron Observer: estadisticas de los observadores del mercado.
+    Route::get('/observer/stats', [EnergyController::class, 'getObserverStats']);
+
+    // Patron State: ciclo de vida de las ofertas (disponible/parcial/agotada).
+    Route::get('/offers/states', [EnergyController::class, 'getOfferStates']);
+
+    // Patron Visitor: reporte y auditoria del inventario del mercado.
+    Route::get('/visitor/report', [EnergyController::class, 'getVisitorReport']);
 });
